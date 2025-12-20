@@ -1,0 +1,47 @@
+================================================================================
+                              LİSANS SÖZLEŞMESİ
+                    PAINT FORMULATION AI - PORTABLE EDITION
+================================================================================
+
+Telif Hakkı © 2024 Paint Formulation AI
+
+Bu yazılım ve ilgili dokümantasyon dosyaları ("Yazılım"), aşağıdaki koşullara
+tabi olarak lisanslanmıştır:
+
+
+KULLANIM KOŞULLARI
+------------------
+
+1. KULLANIM HAKKI
+   Bu Yazılımı ticari veya kişisel amaçlarla kullanma hakkı verilmektedir.
+
+2. DAĞITIM
+   Bu Yazılımın kopyalarını dağıtırken bu lisans dosyasını eklemeniz 
+   gerekmektedir.
+
+3. DEĞİŞİKLİK
+   Yazılımı değiştirme veya uyarlama hakkı saklıdır. Değiştirilmiş sürümler
+   açıkça işaretlenmelidir.
+
+
+GARANTİ REDDİ
+-------------
+
+BU YAZILIM "OLDUĞU GİBİ" SAĞLANMAKTADIR. HERHANGİ BİR GARANTİ, AÇIK VEYA
+ZIMNİ, TİCARİ ELVERİŞLİLİK, BELİRLİ BİR AMACA UYGUNLUK VE İHLAL ETMEME
+GARANTİLERİ DAHİL ANCAK BUNLARLA SINIRLI OLMAMAK ÜZERE, VERİLMEMEKTEDİR.
+
+HİÇBİR DURUMDA YAZARLAR VEYA TELİF HAKKI SAHİPLERİ, SÖZLEŞMEDEN, HAKSIZ
+FİİLDEN VEYA BAŞKA BİR NEDENLE KAYNAKLANAN, YAZILIMLA VEYA YAZILIMIN
+KULLANIMI VEYA DİĞER İŞLEMLERLE BAĞLANTILI HERHANGİ BİR TALEPİ, HASAR VEYA
+DİĞER YÜKÜMLÜLÜKLERDEN SORUMLU OLMAYACAKTIR.
+
+
+İLETİŞİM
+--------
+Lisans ile ilgili sorularınız için: license@example.com
+
+
+================================================================================
+                          © 2024 Paint Formulation AI
+================================================================================

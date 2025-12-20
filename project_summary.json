@@ -1,0 +1,117 @@
+{
+    "project": {
+        "name": "Paint Formulation AI - Portable Edition",
+        "description": "Boya formülasyonu yönetimi ve Hibrit (Offline/Online) Öneri Sistemi",
+        "version": "1.1.0-offline",
+        "deployment_type": "Desktop Application (No-Install Required)",
+        "python_version": "3.9 (Embedded)",
+        "offline_capable": true
+    },
+    "features": {
+        "core_system": {
+            "description": "İnternetsiz tam fonksiyonellik (Veri girişi, Dashboard, Excel)",
+            "enabled": true
+        },
+        "local_storage": {
+            "description": "Sunucu gerektirmeyen yerel veritabanı (SQLite + JSON)",
+            "type": "sqlite_embedded",
+            "enabled": true
+        },
+        "hybrid_ml_engine": {
+            "description": "ML Motoru hibrit çalışır",
+            "modes": {
+                "offline_mode": "Scikit-learn ile temel regresyon ve sınıflandırma (Lokal)",
+                "online_mode": "Derin öğrenme / LLM API çağrıları (İnternet varsa)"
+            }
+        },
+        "connectivity_check": {
+            "description": "Online özellikler için otomatik bağlantı kontrolü ve 'Graceful Degradation'",
+            "enabled": true
+        }
+    },
+    "structure": {
+        "root_files": [
+            "PaintFormulationAI.exe",
+            "config.ini",
+            "data_storage/",
+            "logs/",
+            "README_TR.txt",
+            "LISANS.txt"
+        ],
+        "source_structure_internal": {
+            "description": "Bu dosyalar EXE içine gömülecektir, kullanıcı görmez",
+            "directories": {
+                "app": {
+                    "files": [
+                        "main.py",
+                        "ui_components.py",
+                        "offline_utils.py"
+                    ]
+                },
+                "src": {
+                    "data_handlers": {
+                        "local_db_manager.py": "SQLite bağlantı yöneticisi (Sunucu yok)",
+                        "file_system_manager.py": "Excel/CSV okuma yazma"
+                    },
+                    "ml_engine": {
+                        "router.py": "İnternet varsa API'ye, yoksa Local Modele yönlendirir",
+                        "local_models.py": "Hafif .pkl modelleri (Random Forest vb.)",
+                        "api_client.py": "Online ML servisine güvenli bağlantı"
+                    },
+                    "utils": {
+                        "network_checker.py": "Ping atarak internet durumunu sorgular"
+                    }
+                },
+                "assets": {
+                    "models": "local_model_v1.pkl",
+                    "templates": "BOSCH_Sablon.xlsx",
+                    "icons": "app_icon.ico"
+                }
+            }
+        }
+    },
+    "dependencies": {
+        "runtime": {
+            "python": "Embedded in EXE (Kullanıcıda yüklü olmasına gerek yok)",
+            "libraries": "Tüm kütüphaneler EXE içine paketlenir"
+        },
+        "external_services": {
+            "ml_api": {
+                "required": false,
+                "description": "Sadece gelişmiş öneriler için opsiyonel internet bağlantısı"
+            }
+        }
+    },
+    "build_system": {
+        "tool": "PyInstaller",
+        "config_file": "build_spec.spec",
+        "installer_compiler": "Inno Setup (Opsiyonel Setup.exe oluşturmak için)",
+        "commands": {
+            "build_exe": "pyinstaller --noconfirm --onefile --windowed --icon=assets/icon.ico main.py",
+            "clean_build": "rm -rf build dist"
+        }
+    },
+    "user_workflow": {
+        "step_1": "PaintFormulationAI.exe çift tıklanır (Kurulumsuz)",
+        "step_2": "Uygulama yerel veritabanını (data_storage/db.sqlite) kontrol eder/yaratır",
+        "step_3": "Kullanıcı Excel dosyasını sürükleyip bırakır (Offline)",
+        "step_4": "Grafikler ve analizler gösterilir (Offline)",
+        "step_5": "Kullanıcı 'AI Öneri Al' butonuna basar",
+        "step_6_decision": {
+            "if_internet_ok": "Bulut sunucuya/API'ye bağlanır, gelişmiş öneri getirir.",
+            "if_internet_fail": "Uyarı verir: 'İnternet yok, yerel algoritma kullanılıyor' ve basit öneri sunar."
+        }
+    },
+    "modules_revised": {
+        "data_layer": {
+            "removed": "PostgreSQL/MySQL Drivers",
+            "added": "SQLite3 (Gömülü)",
+            "function": "Tüm proje verilerini tek bir dosyada (.db) tutar"
+        },
+        "deployment": {
+            "removed": "Docker, Kubernetes, Nginx",
+            "added": "Single Executable Architecture",
+            "function": "USB bellekte bile çalışabilirlik"
+        }
+    }
+}

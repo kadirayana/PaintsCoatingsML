@@ -1,0 +1,32 @@
+# Paint Formulation AI - Gereksinimler
+# =====================================
+# Bu dosya, projenin çalışması için gerekli Python kütüphanelerini listeler.
+#
+# Kurulum:
+#   pip install -r requirements.txt
+#
+# Not: Tüm kütüphaneler EXE'ye gömüleceği için son kullanıcının
+# bunları yüklemesine gerek yoktur.
+
+# Temel kütüphaneler (Python ile gelir)
+# sqlite3 (dahili)
+# tkinter (dahili)
+# configparser (dahili)
+# json (dahili)
+# csv (dahili)
+# logging (dahili)
+
+# Excel işlemleri
+openpyxl>=3.1.0
+
+# ML kütüphaneleri (opsiyonel - offline model için)
+scikit-learn>=1.3.0
+numpy>=1.24.0
+
+# Build araçları
+pyinstaller>=6.0.0
+
+# Geliştirme araçları (opsiyonel)
+# pytest>=7.0.0
+# black>=23.0.0
+# flake8>=6.0.0
