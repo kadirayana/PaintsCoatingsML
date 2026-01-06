@@ -1,0 +1,94 @@
+# ============================================
+# Paint Formulation AI - Python .gitignore
+# ============================================
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# === Virtual Environments ===
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# === IDEs & Editors ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# === Database Files (Local SQLite) ===
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+data/*.sqlite
+
+# === Logs ===
+*.log
+logs/
+*.txt.log
+
+# === ML Models (Large Binary Files) ===
+assets/models/*.pkl
+assets/models/*.joblib
+assets/models/*.xgb
+!assets/models/.gitkeep
+
+# === OS Generated ===
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# === Jupyter Notebooks ===
+.ipynb_checkpoints/
+*.ipynb
+
+# === Test & Coverage ===
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+
+# === Secrets & Config (if any) ===
+.env
+*.pem
+secrets.json
+config.local.ini
+
+# === Temporary Files ===
+*.tmp
+*.temp
+*.bak
+temp/
+tmp/

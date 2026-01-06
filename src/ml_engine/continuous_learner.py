@@ -43,6 +43,10 @@ class ContinuousLearner:
         self.target_names = []
         self.training_history = []
         self.last_training_date = None
+        self.training_sample_count = 0  # Eğitim verisi sayısı (uncertainty için)
+        
+        # Uncertainty Estimator (lazy loading)
+        self._uncertainty_estimator = None
         
         # Modelleri yükle (varsa)
         self._load_models()
@@ -98,6 +102,10 @@ class ContinuousLearner:
         Returns:
             Eğitim sonuçları
         """
+        logger.info(f"ML Eğitimi Başlatıldı. Gelen veri sayısı: {len(data)}")
+        if data:
+            logger.info(f"Örnek veri (ID: {data[0].get('id')}): {list(data[0].keys())}")
+
         if len(data) < self.MIN_TRAINING_SAMPLES:
             return {
                 'success': False,
@@ -111,8 +119,14 @@ class ContinuousLearner:
             from sklearn.preprocessing import StandardScaler
             from sklearn.model_selection import cross_val_score
             
-            # Özellik ve hedef sütunları belirle (kaplama kalınlığı dahil)
-            self.feature_names = ['viscosity', 'ph', 'density', 'coating_thickness']
+            # Özellik ve hedef sütunları belirle
+            from src.ml_engine.recipe_transformer import RecipeTransformer
+            recipe_transformer = RecipeTransformer()
+            
+            # Temel özellikler + Reçete özellikleri
+            base_features = ['viscosity', 'ph', 'density', 'coating_thickness']
+            self.feature_names = base_features + recipe_transformer.get_feature_names()
+            
             self.target_names = [
                 'opacity', 'gloss', 'quality_score', 'total_cost',
                 'corrosion_resistance', 'adhesion', 'hardness', 
@@ -183,7 +197,7 @@ class ContinuousLearner:
                             ))
                         }
             
-            # Eğitim geçmişine ekle
+            # E\u011fitim ge\u00e7mi\u015fine ekle
             self.training_history.append({
                 'date': datetime.now().isoformat(),
                 'samples': len(X),
@@ -191,6 +205,10 @@ class ContinuousLearner:
             })
             
             self.last_training_date = datetime.now()
+            self.training_sample_count = len(X)  # Uncertainty i\u00e7in sakla
+            
+            # Son eğitim sonuçlarını kaydet (get_model_status için)
+            self._last_training_results = results.get('targets', {})
             
             # Modelleri kaydet
             self._save_models()
@@ -208,26 +226,28 @@ class ContinuousLearner:
         X = []
         y_dict = {target: [] for target in self.target_names}
         
-        for row in data:
+        for i, row in enumerate(data):
             # Özellikleri al
             features = []
             valid = True
-            
             for feat in self.feature_names:
                 val = self._get_numeric_value(row.get(feat))
                 if val is not None:
                     features.append(val)
                 else:
-                    valid = False
-                    break
+                    # Eksik özellik (özellikle yeni reçete özellikleri) için 0.0 kullan
+                    # Bu sayede eski veri setleri ile de eğitim yapılabilir (Backward Compatibility)
+                    features.append(0.0)
             
-            if valid:
-                X.append(features)
+            # Her halükarda ekle (yeterli veri olması için)
+            X.append(features)
                 
-                # Hedefleri al
-                for target in self.target_names:
-                    val = self._get_numeric_value(row.get(target))
-                    y_dict[target].append(val if val is not None else float('nan'))
+            # Hedefleri al
+            for target in self.target_names:
+                val = self._get_numeric_value(row.get(target))
+                y_dict[target].append(val if val is not None else float('nan'))
+        
+        return X, y_dict
         
         return X, y_dict
     
@@ -247,6 +267,20 @@ class ContinuousLearner:
         try:
             import numpy as np
             
+            # Feature Enrichment (Reçete Girdisi Varsa)
+            if 'formulation' in features and isinstance(features['formulation'], dict):
+                recipe = features['formulation'].get('components', [])
+                if recipe:
+                    from src.ml_engine.recipe_transformer import RecipeTransformer
+                    transformer = RecipeTransformer()
+                    
+                    recipe_features = list(transformer.transform(recipe))
+                    recipe_feature_names = transformer.get_feature_names()
+                    
+                    # features sözlüğüne ekle (mevcut değerleri ezmemek için kontrol edilebilir ama ML tahmini için reçetedeki değerler esastır)
+                    for name, val in zip(recipe_feature_names, recipe_features):
+                        features[name] = val
+            
             # Girdi hazırla
             X = [[
                 self._get_numeric_value(features.get(f, 0)) or 0
@@ -259,11 +293,53 @@ class ContinuousLearner:
                 X = self.scalers['main'].transform(X)
             
             predictions = {}
+            confidence_info = {}
+            
+            # Uncertainty Estimator lazy loading
+            if self._uncertainty_estimator is None:
+                from src.ml_engine.uncertainty_estimator import UncertaintyEstimator
+                self._uncertainty_estimator = UncertaintyEstimator()
+            
             for target_name, model in self.models.items():
                 pred = model.predict(X)[0]
                 predictions[target_name] = round(pred, 2)
+                
+                # G\u00fcven tahmini yap
+                try:
+                    conf_result = self._uncertainty_estimator.estimate_confidence(
+                        pred, model, X, self.training_sample_count
+                    )
+                    confidence_info[target_name] = {
+                        'confidence': conf_result.confidence_percent,
+                        'lower': conf_result.lower_bound,
+                        'upper': conf_result.upper_bound,
+                        'is_cold_start': conf_result.is_cold_start
+                    }
+                except Exception:
+                    confidence_info[target_name] = {'confidence': 0, 'is_cold_start': True}
             
-            return {'success': True, 'predictions': predictions}
+            # Genel g\u00fcven
+            overall_confidence = self._uncertainty_estimator.get_overall_confidence(
+                {k: self._uncertainty_estimator.estimate_confidence(
+                    predictions[k], self.models[k], X, self.training_sample_count
+                ) for k in predictions}
+            ) if predictions else 0
+            
+            confidence_message = self._uncertainty_estimator.get_confidence_message(
+                overall_confidence, 
+                self.training_sample_count < 10
+            )
+            
+            return {
+                'success': True, 
+                'predictions': predictions,
+                'confidence': {
+                    'overall': overall_confidence,
+                    'message': confidence_message,
+                    'sample_count': self.training_sample_count,
+                    'details': confidence_info
+                }
+            }
             
         except Exception as e:
             return {'success': False, 'message': str(e)}
@@ -298,7 +374,8 @@ class ContinuousLearner:
             default_constraints = {
                 'viscosity': {'min': 500, 'max': 8000},
                 'ph': {'min': 6, 'max': 10},
-                'density': {'min': 0.8, 'max': 1.5}
+                'density': {'min': 0.8, 'max': 1.5},
+                'coating_thickness': {'min': 10, 'max': 500}
             }
             
             if constraints:
@@ -308,53 +385,67 @@ class ContinuousLearner:
             
             constraints = default_constraints
             
-            # Grid search ile optimum bul
-            best_score = float('-inf')
-            best_params = None
-            best_predictions = None
+            # Grid search ile optimum bul (Optimized)
+            n_points = 10  # Reduced from 20 for speed
             
-            # Arama grid'i oluştur
-            n_points = 20
-            grids = {}
-            for param, limits in constraints.items():
-                grids[param] = np.linspace(limits['min'], limits['max'], n_points)
+            # Create parameter grids
+            param_grids = {k: np.linspace(v['min'], v['max'], n_points) 
+                          for k, v in constraints.items() if k in self.feature_names}
             
-            # Tüm kombinasyonları dene
-            for visc in grids.get('viscosity', [2000]):
-                for ph in grids.get('ph', [8]):
-                    for dens in grids.get('density', [1.1]):
-                        params = {'viscosity': visc, 'ph': ph, 'density': dens}
-                        
-                        # Tahmin al
-                        pred_result = self.predict(params)
-                        if not pred_result['success']:
-                            continue
-                        
-                        predictions = pred_result['predictions']
-                        
-                        # Maliyet hesapla (malzeme fiyatları varsa)
-                        if material_costs:
-                            total_cost = self._calculate_cost(params, material_costs)
-                            predictions['total_cost'] = total_cost
-                        
-                        # Çoklu hedef skoru hesapla
-                        score = self._calculate_multi_objective_score(predictions, objectives)
-                        
-                        if score > best_score:
-                            best_score = score
-                            best_params = params.copy()
-                            best_predictions = predictions.copy()
+            # Generate all combinations using meshgrid
+            grid_arrays = [param_grids.get(f, np.array([1.0])) for f in self.feature_names]
+            mesh = np.meshgrid(*grid_arrays, indexing='ij')
+            X_grid = np.column_stack([m.ravel() for m in mesh])
             
-            if best_params:
-                return {
-                    'success': True,
-                    'optimal_params': {k: round(v, 2) for k, v in best_params.items()},
-                    'predicted_results': best_predictions,
-                    'optimization_score': round(best_score, 3),
-                    'objectives_met': self._check_objectives_met(best_predictions, objectives)
-                }
+            # Batch prediction
+            if 'main' in self.scalers:
+                X_scaled = self.scalers['main'].transform(X_grid)
             else:
-                return {'success': False, 'message': 'Optimum bulunamadı'}
+                X_scaled = X_grid
+            
+            # Predict all targets at once
+            all_predictions = {}
+            for target_name, model in self.models.items():
+                all_predictions[target_name] = model.predict(X_scaled)
+            
+            # Calculate scores for all combinations
+            n_samples = X_grid.shape[0]
+            scores = np.zeros(n_samples)
+            
+            total_weight = sum(obj.get('weight', 1) for obj in objectives.values())
+            
+            for target, obj in objectives.items():
+                if target in all_predictions:
+                    pred_values = all_predictions[target]
+                    target_value = obj.get('target', 100)
+                    weight = obj.get('weight', 1) / total_weight
+                    direction = obj.get('direction', 'max')
+                    
+                    if direction == 'max':
+                        normalized = np.minimum(pred_values / max(target_value, 0.01), 1.5)
+                    elif direction == 'min':
+                        normalized = np.minimum(target_value / np.maximum(pred_values, 0.01), 1.5)
+                    else:
+                        diff = np.abs(pred_values - target_value)
+                        normalized = 1 / (1 + diff / max(target_value, 1))
+                    
+                    scores += weight * normalized
+            
+            # Find best
+            best_idx = np.argmax(scores)
+            best_x = X_grid[best_idx]
+            
+            best_params = dict(zip(self.feature_names, best_x))
+            best_predictions = {t: float(all_predictions[t][best_idx]) for t in all_predictions}
+            best_score = scores[best_idx]
+            
+            return {
+                'success': True,
+                'optimal_params': {k: round(v, 2) for k, v in best_params.items()},
+                'predicted_results': {k: round(v, 2) for k, v in best_predictions.items()},
+                'optimization_score': round(float(best_score), 3),
+                'objectives_met': self._check_objectives_met(best_predictions, objectives)
+            }
                 
         except Exception as e:
             logger.error(f"Optimizasyon hatası: {e}")
@@ -448,8 +539,8 @@ class ContinuousLearner:
         return importance
     
     def get_model_status(self) -> Dict:
-        """Model durumunu döndür"""
-        return {
+        """Model durumunu ve performans metriklerini döndür"""
+        status = {
             'trained': len(self.models) > 0,
             'models_count': len(self.models),
             'targets': list(self.models.keys()),
@@ -458,6 +549,21 @@ class ContinuousLearner:
             'training_count': len(self.training_history),
             'min_samples_required': self.MIN_TRAINING_SAMPLES
         }
+        
+        # Son eğitim detaylarını ekle
+        if self.training_history:
+            last_training = self.training_history[-1]
+            status['last_training_details'] = {
+                'date': last_training.get('date'),
+                'samples': last_training.get('samples'),
+                'targets_trained': last_training.get('targets', [])
+            }
+        
+        # Model metriklerini ekle (eğer kaydedildiyse)
+        if hasattr(self, '_last_training_results'):
+            status['performance_metrics'] = self._last_training_results
+        
+        return status
     
     def suggest_improvements(self, current_results: Dict, target_improvements: Dict) -> List[Dict]:
         """

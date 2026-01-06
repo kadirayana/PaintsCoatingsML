@@ -3,7 +3,7 @@
                     PAINT FORMULATION AI - PORTABLE EDITION
 ================================================================================
 
-Telif Hakkı © 2024 Paint Formulation AI
+Telif Hakkı © 2026 Paint Formulation AI
 
 Bu yazılım ve ilgili dokümantasyon dosyaları ("Yazılım"), aşağıdaki koşullara
 tabi olarak lisanslanmıştır:
@@ -39,9 +39,9 @@ DİĞER YÜKÜMLÜLÜKLERDEN SORUMLU OLMAYACAKTIR.
 
 İLETİŞİM
 --------
-Lisans ile ilgili sorularınız için: license@example.com
+Lisans ile ilgili sorularınız için: ayanakadir@hotmail.com
 
 
 ================================================================================
-                          © 2024 Paint Formulation AI
+                          © 2026 Paint Formulation AI
 ================================================================================
