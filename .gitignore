@@ -92,3 +92,16 @@ config.local.ini
 *.bak
 temp/
 tmp/
+
+# === Build Artifacts ===
+dist/
+*.spec
+
+# === Generated Templates ===
+templates/*.xlsx
+
+# === Legacy/Backup ===
+_legacy_backup/
+
+# === Data Storage ===
+data_storage/
