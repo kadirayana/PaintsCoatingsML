@@ -39,12 +39,16 @@ Built with Python and Tkinter, this tool helps reduce development cycles by inte
 
 <div align="center">
 
-| Main Dashboard | Formulation Editor |
-|<img width="2559" height="1393" alt="image" src="https://github.com/user-attachments/assets/276f7787-f184-4f46-a255-255fe30625f4" />|<img width="2559" height="1391" alt="image" src="https://github.com/user-attachments/assets/7a401137-6a17-43d9-bd55-58dbd1170c99" />|
+| Main Dashboard |  
+<img width="2559" height="1393" alt="image" src="https://github.com/user-attachments/assets/276f7787-f184-4f46-a255-255fe30625f4" />
+| Formulation Editor |
+<img width="2559" height="1391" alt="image" src="https://github.com/user-attachments/assets/7a401137-6a17-43d9-bd55-58dbd1170c99" />
 
 
-| ML Predictions | Material Management |
-|(<img width="2554" height="1392" alt="image" src="https://github.com/user-attachments/assets/7364e5c1-dc21-4e02-ae13-7dd5b43456be" />|(<img width="2557" height="1394" alt="image" src="https://github.com/user-attachments/assets/73e5fb84-d978-4a7f-80e9-7d0ae8f499a4" />|
+| ML Predictions |
+(<img width="2554" height="1392" alt="image" src="https://github.com/user-attachments/assets/7364e5c1-dc21-4e02-ae13-7dd5b43456be" />
+| Material Management |
+(<img width="2557" height="1394" alt="image" src="https://github.com/user-attachments/assets/73e5fb84-d978-4a7f-80e9-7d0ae8f499a4" />
 
 </div>
 
@@ -137,7 +141,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👤 Author
 
-**Your Name**
+**Kadir AYANA**
 - LinkedIn: www.linkedin.com/in/kadirayana
 - Email: ayanakadir@hotmail.com
 
