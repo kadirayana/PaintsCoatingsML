@@ -41,7 +41,9 @@ Built with Python and Tkinter, this tool helps reduce development cycles by inte
 
 | Main Dashboard | Formulation Editor |
 |:--------------:|:------------------:|
-| ![Dashboard](screenshots/dashboard.png) | ![Editor](screenshots/editor.png) |
+| <img width="2559" height="1393" alt="image" src="https://github.com/user-attachments/assets/276f7787-f184-4f46-a255-255fe30625f4" />
+ |<img width="2559" height="1391" alt="image" src="https://github.com/user-attachments/assets/7a401137-6a17-43d9-bd55-58dbd1170c99" />
+ |
 
 | ML Predictions | Material Management |
 |:--------------:|:-------------------:|
