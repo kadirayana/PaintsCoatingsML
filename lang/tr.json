@@ -1,0 +1,122 @@
+{
+    "app_title": "Boya Formülasyon AI",
+    "menu": {
+        "file": "Dosya",
+        "new_project": "Yeni Proje",
+        "import": "İçe Aktar",
+        "export": "Dışa Aktar",
+        "settings": "Ayarlar",
+        "exit": "Çıkış"
+    },
+    "tabs": {
+        "dashboard": "Panel",
+        "materials": "Malzemeler",
+        "formulation": "Formülasyon",
+        "test_results": "Test Sonuçları",
+        "ml_center": "ML Merkezi",
+        "comparison": "Karşılaştırma"
+    },
+    "sidebar": {
+        "project_navigator": "Proje Gezgini",
+        "new_project": "Yeni Proje",
+        "new_concept": "Yeni Konsept",
+        "new_trial": "Yeni Deneme",
+        "delete": "Sil",
+        "refresh": "Yenile"
+    },
+    "materials": {
+        "title": "Hammadde Yönetimi",
+        "add": "Hammadde Ekle",
+        "import_excel": "Excel'den İçe Aktar",
+        "code": "Kod",
+        "name": "İsim",
+        "category": "Kategori",
+        "categories": {
+            "resin": "Reçine",
+            "pigment": "Pigment",
+            "solvent": "Çözücü",
+            "additive": "Katkı"
+        },
+        "properties": {
+            "physical": "Fiziksel Özellikler",
+            "chemical": "Kimyasal Özellikler",
+            "optical": "Optik Özellikler",
+            "thermal": "Termal Özellikler"
+        },
+        "density": "Yoğunluk",
+        "solid_content": "Katı İçeriği",
+        "viscosity": "Viskozite",
+        "oh_value": "OH Değeri",
+        "acid_value": "Asit Değeri"
+    },
+    "formulation": {
+        "title": "Formülasyon Editörü",
+        "code": "Formül Kodu",
+        "name": "Formül Adı",
+        "add_component": "Bileşen Ekle",
+        "percentage": "Oran (%)",
+        "total": "Toplam",
+        "calculate": "Hesapla",
+        "save": "Kaydet",
+        "clear": "Temizle",
+        "predicted_quality": "Tahmini Kalite",
+        "estimated_cost": "Tahmini Maliyet"
+    },
+    "tests": {
+        "title": "Test Sonuçları",
+        "groups": {
+            "mechanical": "Mekanik Testler",
+            "optical": "Optik Testler",
+            "chemical": "Kimyasal Testler",
+            "durability": "Dayanım Testleri"
+        },
+        "hardness": "Sertlik (König)",
+        "flexibility": "Esneklik",
+        "impact": "Çarpma Dayanımı",
+        "adhesion": "Yapışma",
+        "gloss": "Parlaklık",
+        "opacity": "Örtücülük",
+        "color_delta": "Renk Farkı (ΔE)",
+        "acid_resistance": "Asit Dayanımı",
+        "alkali_resistance": "Alkali Dayanımı",
+        "salt_spray": "Tuz Spreyi",
+        "uv_resistance": "UV Dayanımı",
+        "include_in_ml": "ML eğitimine dahil et"
+    },
+    "status": {
+        "good": "İYİ",
+        "medium": "ORTA",
+        "bad": "ZAYIF",
+        "saved": "Kaydedildi",
+        "loading": "Yükleniyor...",
+        "error": "Hata"
+    },
+    "ml": {
+        "title": "ML Merkezi",
+        "project_model": "Proje Modeli",
+        "global_model": "Global Model",
+        "confidence": "Güven Skoru",
+        "train": "Modeli Eğit",
+        "last_trained": "Son Eğitim",
+        "samples": "Örnek Sayısı",
+        "suggestions": "Öneriler",
+        "no_model": "Model henüz eğitilmedi"
+    },
+    "buttons": {
+        "save": "Kaydet",
+        "cancel": "İptal",
+        "delete": "Sil",
+        "edit": "Düzenle",
+        "close": "Kapat",
+        "apply": "Uygula",
+        "reset": "Sıfırla",
+        "copy": "Kopyala",
+        "paste": "Yapıştır"
+    },
+    "dialogs": {
+        "confirm_delete": "Silmek istediğinizden emin misiniz?",
+        "unsaved_changes": "Kaydedilmemiş değişiklikler var. Devam etmek istiyor musunuz?",
+        "success": "Başarılı",
+        "error": "Hata oluştu"
+    }
+}

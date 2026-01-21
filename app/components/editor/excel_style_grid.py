@@ -12,11 +12,46 @@ Features:
 """
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from typing import Callable, Dict, List, Optional, Any, Tuple
 import logging
+import re
 
 logger = logging.getLogger(__name__)
+
+
+def safe_float(value: Any, default: float = 0.0) -> Tuple[Optional[float], bool]:
+    """
+    Safely convert value to float.
+    
+    Returns:
+        Tuple of (converted_value, is_valid)
+        If invalid, converted_value is the default
+    """
+    if value is None or value == '':
+        return default, True
+    
+    try:
+        # Handle string values
+        if isinstance(value, str):
+            # Remove whitespace and common formatting
+            cleaned = value.strip().replace(',', '.').replace(' ', '')
+            if not cleaned:
+                return default, True
+            return float(cleaned), True
+        return float(value), True
+    except (ValueError, TypeError):
+        return default, False
+
+
+def is_numeric_string(value: str) -> bool:
+    """Check if string represents a valid number."""
+    if not value or not value.strip():
+        return True  # Empty is allowed
+    
+    # Allow: digits, one decimal point, leading minus
+    pattern = r'^-?\d*\.?\d*$'
+    return bool(re.match(pattern, value.strip().replace(',', '.')))
 
 
 class EditableCell(ttk.Entry):
@@ -195,14 +230,20 @@ class ExcelStyleGrid(ttk.Frame):
     
     # Column definitions: (key, header, width, editable, type, bg_color)
     # bg_color: 'input' = white, 'readonly' = light gray
+    # Note: solid_content and unit_price are editable only for manual mode (checked at runtime)
     COLUMNS = [
         ('row_num', '#', 40, False, 'text', 'readonly'),
         ('material_code', 'Hammadde Kodu', 120, True, 'text', 'input'),
-        ('material_name', 'Hammadde İsmi', 180, False, 'text', 'readonly'),
+        ('material_name', 'Hammadde İsmi', 180, 'conditional', 'text', 'readonly'),  # conditional = manual only
         ('weight', 'Ağırlık (gr/kg)', 100, True, 'number', 'input'),
-        ('solid_weight', 'Katı Ağırlık', 100, False, 'number', 'readonly'),
-        ('price', 'Fiyat', 100, False, 'currency', 'readonly'),
+        ('solid_pct', 'Katı %', 60, 'conditional', 'number', 'input'),  # editable for manual
+        ('solid_weight', 'Katı Ağırlık', 80, False, 'number', 'readonly'),
+        ('unit_price', 'Birim Fiyat', 70, 'conditional', 'currency', 'input'),  # editable for manual
+        ('total_price', 'Toplam Fiyat', 80, False, 'currency', 'readonly'),
     ]
+    
+    # Manual entry marker
+    MANUAL_MARKER = '📝 '
     
     def __init__(
         self,
@@ -219,8 +260,11 @@ class ExcelStyleGrid(ttk.Frame):
         self.on_get_materials = on_get_materials
         
         self.row_count = 0
-        # Store hidden material data per row (solid_content, unit_price)
-        self.row_data = {}  # item_id -> {'solid_content': %, 'unit_price': TL}
+        # Store hidden material data per row:
+        # - source_type: 'db' (from database) or 'manual' (user entered)
+        # - solid_content: % (0-100)
+        # - unit_price: TL per kg
+        self.row_data = {}  # item_id -> {source_type, solid_content, unit_price}
         
         self._create_ui()
         self._create_edit_widgets()
@@ -267,6 +311,9 @@ class ExcelStyleGrid(ttk.Frame):
         self.tree.tag_configure('empty', foreground='gray')
         self.tree.tag_configure('edited', foreground='#1565C0')
         self.tree.tag_configure('warning', foreground='#FF5722')  # Material not found
+        self.tree.tag_configure('error_row', background='#FFEBEE', foreground='#C62828')  # Validation error
+        self.tree.tag_configure('db_row', foreground='#1B5E20')  # DB material
+        self.tree.tag_configure('manual_row', foreground='#E65100')  # Manual material
     
     def _create_edit_widgets(self):
         """Create floating edit widgets"""
@@ -301,7 +348,12 @@ class ExcelStyleGrid(ttk.Frame):
         
         col_key, col_header, col_width, editable, col_type, bg_type = self.COLUMNS[col_idx]
         
-        if not editable:
+        # Check editability - 'conditional' means only editable for manual rows
+        if editable == 'conditional':
+            # Check if this row is manual
+            if item_id not in self.row_data or self.row_data.get(item_id, {}).get('source_type') != 'manual':
+                return  # Not editable for DB rows
+        elif not editable:
             return
         
         # Get cell bbox
@@ -433,10 +485,19 @@ class ExcelStyleGrid(ttk.Frame):
         """
         Handle value change and trigger calculations.
         
-        Scenario A: User types 'material_code' -> Lookup DB, fill name, store hidden data
-        Scenario B: User types 'weight' -> Calculate solid_weight and price
+        NEW 8-Column Structure:
+        0: row_num, 1: material_code, 2: material_name, 3: weight
+        4: solid_pct, 5: solid_weight, 6: unit_price, 7: total_price
+        
+        Source Types:
+        - 'db': Material from database - name/solid_pct/unit_price are read-only
+        - 'manual': Manual entry - user can edit name/solid_pct/unit_price
         """
         values = list(self.tree.item(item_id, 'values'))
+        
+        # Ensure values has 8 elements
+        while len(values) < 8:
+            values.append('')
         
         if column_key == 'material_code':
             # Lookup material from database by code
@@ -445,43 +506,89 @@ class ExcelStyleGrid(ttk.Frame):
                 material = self.on_material_lookup(value)
             
             if material:
-                # Material found in DB - use its data
+                # ===== DB MODE: Material found =====
                 material_name = material.get('name', value)
-                values[2] = material_name
+                solid_content = material.get('solid_content', 100) or 100
+                unit_price = material.get('unit_price', 0) or 0
                 
-                # Store hidden data for calculations
+                values[2] = material_name  # material_name
+                values[4] = f"{solid_content:.0f}"  # solid_pct
+                values[6] = f"{unit_price:.2f}" if unit_price else ""  # unit_price
+                
+                # Store data with source_type
                 self.row_data[item_id] = {
-                    'solid_content': material.get('solid_content', 100) / 100,  # as ratio
-                    'unit_price': material.get('unit_price', 0) or 0
+                    'source_type': 'db',
+                    'solid_content': solid_content,
+                    'unit_price': unit_price,
+                    'material_id': material.get('id'),
                 }
                 
-                self.tree.item(item_id, values=values, tags=('edited',))
+                self.tree.item(item_id, values=values, tags=('db_row',))
+                
             elif value:
-                # Material NOT found in DB - allow manual entry with defaults
-                # Use the code itself as the name, show info indicator
-                values[2] = f"📝 {value}"  # Manual entry indicator
+                # ===== MANUAL MODE: Material NOT found =====
+                values[2] = f"{self.MANUAL_MARKER}{value}"  # Show marker + code as name
+                values[4] = "100"  # Default 100% solid
+                values[6] = ""  # No price
                 
-                # Store default values - 100% solid, 0 price (user can still see weight)
+                # Store data with manual source_type
                 self.row_data[item_id] = {
-                    'solid_content': 1.0,  # 100% solid as default
-                    'unit_price': 0  # No price info
+                    'source_type': 'manual',
+                    'solid_content': 100,
+                    'unit_price': 0,
                 }
                 
-                self.tree.item(item_id, values=values, tags=('edited',))
+                self.tree.item(item_id, values=values, tags=('manual_row',))
+                
             else:
                 # Empty code - clear everything
-                values[2] = ''
-                values[4] = ''
-                values[5] = ''
-                self.tree.item(item_id, values=values)
+                values[2] = ''  # name
+                values[4] = ''  # solid_pct
+                values[5] = ''  # solid_weight
+                values[6] = ''  # unit_price
+                values[7] = ''  # total_price
+                self.tree.item(item_id, values=values, tags=('empty',))
                 self.row_data.pop(item_id, None)
             
             # Recalculate if weight already exists
-            if values[3]:  # weight column
+            if values[3]:
                 self._recalculate_row(item_id)
         
+        elif column_key == 'material_name':
+            # Only editable in manual mode - update the name
+            row_info = self.row_data.get(item_id, {})
+            if row_info.get('source_type') == 'manual':
+                values[2] = f"{self.MANUAL_MARKER}{value}" if not value.startswith(self.MANUAL_MARKER) else value
+                self.tree.item(item_id, values=values)
+        
+        elif column_key == 'solid_pct':
+            # Only editable in manual mode - update solid percentage
+            row_info = self.row_data.get(item_id, {})
+            if row_info.get('source_type') == 'manual':
+                try:
+                    solid_content = float(value) if value else 100
+                    row_info['solid_content'] = solid_content
+                    values[4] = f"{solid_content:.0f}"
+                    self.tree.item(item_id, values=values)
+                    self._recalculate_row(item_id)
+                except ValueError:
+                    pass
+        
+        elif column_key == 'unit_price':
+            # Only editable in manual mode - update price
+            row_info = self.row_data.get(item_id, {})
+            if row_info.get('source_type') == 'manual':
+                try:
+                    unit_price = float(value) if value else 0
+                    row_info['unit_price'] = unit_price
+                    values[6] = f"{unit_price:.2f}" if unit_price else ""
+                    self.tree.item(item_id, values=values)
+                    self._recalculate_row(item_id)
+                except ValueError:
+                    pass
+        
         elif column_key == 'weight':
-            # Recalculate solid_weight and price
+            # Recalculate solid_weight and total_price
             self._recalculate_row(item_id)
         
         # Trigger callback
@@ -519,14 +626,16 @@ class ExcelStyleGrid(ttk.Frame):
         """Add an empty row and return its ID"""
         self.row_count += 1
         
-        # Create values tuple (6 columns)
+        # Create values tuple (8 columns)
         values = [
             str(self.row_count),  # row_num
             '',  # material_code
             '',  # material_name
             '',  # weight
+            '',  # solid_pct
             '',  # solid_weight
-            '',  # price
+            '',  # unit_price
+            '',  # total_price
         ]
         
         item_id = self.tree.insert('', 'end', values=values, tags=('empty',))
@@ -544,27 +653,44 @@ class ExcelStyleGrid(ttk.Frame):
             self._add_empty_row()
     
     def _recalculate_row(self, item_id: str):
-        """Recalculate solid_weight and price for a row"""
+        """
+        Recalculate solid_weight and total_price for a row.
+        
+        New column indices:
+        3: weight, 4: solid_pct, 5: solid_weight, 6: unit_price, 7: total_price
+        """
         values = list(self.tree.item(item_id, 'values'))
         
-        # Get weight from column index 3
+        # Ensure 8 elements
+        while len(values) < 8:
+            values.append('')
+        
+        # Get weight from column 3
         try:
             weight = float(values[3]) if values[3] else 0
         except ValueError:
             weight = 0
         
-        # Get stored hidden data
+        # Get solid_content from row_data or from column 4 (solid_pct)
         row_info = self.row_data.get(item_id, {})
-        solid_content = row_info.get('solid_content', 1.0)  # ratio 0-1
-        unit_price = row_info.get('unit_price', 0)
+        try:
+            solid_content = float(values[4]) if values[4] else row_info.get('solid_content', 100)
+        except ValueError:
+            solid_content = row_info.get('solid_content', 100)
         
-        # Calculate solid_weight (column index 4)
-        solid_weight = weight * solid_content
-        values[4] = f"{solid_weight:.2f}" if solid_weight > 0 else ""
+        # Get unit_price from row_data or from column 6
+        try:
+            unit_price = float(values[6]) if values[6] else row_info.get('unit_price', 0)
+        except ValueError:
+            unit_price = row_info.get('unit_price', 0)
         
-        # Calculate price (column index 5)
-        price = weight * unit_price
-        values[5] = f"{price:.2f}" if price > 0 else ""
+        # Calculate solid_weight (column 5)
+        solid_weight = weight * (solid_content / 100)
+        values[5] = f"{solid_weight:.2f}" if solid_weight > 0 else ""
+        
+        # Calculate total_price (column 7)
+        total_price = weight * unit_price
+        values[7] = f"{total_price:.2f}" if total_price > 0 else ""
         
         self.tree.item(item_id, values=values)
     
@@ -596,8 +722,24 @@ class ExcelStyleGrid(ttk.Frame):
             self._add_empty_row()
     
     def get_data(self) -> List[Dict]:
-        """Get all row data as list of dicts (5-column format)"""
+        """
+        Get all row data as list of dicts (8-column format).
+        
+        Includes source_type for tracking db vs manual entries.
+        Validation errors are stored in self._last_validation_errors.
+        
+        Returns:
+            List of row dicts. Each has '_valid' key for validation status.
+        """
         data = []
+        errors = []  # Track validation errors
+        
+        # Clear previous error tags
+        for item_id in self.tree.get_children():
+            tags = list(self.tree.item(item_id, 'tags'))
+            if 'error_row' in tags:
+                tags.remove('error_row')
+                self.tree.item(item_id, tags=tuple(tags))
         
         for item_id in self.tree.get_children():
             values = self.tree.item(item_id, 'values')
@@ -608,25 +750,90 @@ class ExcelStyleGrid(ttk.Frame):
             
             # Get hidden data
             row_info = self.row_data.get(item_id, {})
+            row_num = values[0]
+            
+            # Clean material name (remove manual marker)
+            material_name = values[2] if len(values) > 2 else ''
+            if material_name.startswith(self.MANUAL_MARKER):
+                material_name = material_name[len(self.MANUAL_MARKER):]
+            
+            # Safe numeric conversions with validation
+            weight, weight_valid = safe_float(values[3] if len(values) > 3 else '', 0)
+            solid_pct, solid_valid = safe_float(values[4] if len(values) > 4 else '', 100)
+            solid_weight, sw_valid = safe_float(values[5] if len(values) > 5 else '', 0)
+            unit_price, up_valid = safe_float(values[6] if len(values) > 6 else '', 0)
+            total_price, tp_valid = safe_float(values[7] if len(values) > 7 else '', 0)
+            
+            # Track validation errors
+            if not all([weight_valid, solid_valid, sw_valid, up_valid, tp_valid]):
+                invalid_fields = []
+                if not weight_valid: invalid_fields.append('Ağırlık')
+                if not solid_valid: invalid_fields.append('Katı %')
+                if not up_valid: invalid_fields.append('Birim Fiyat')
+                errors.append(f"Satır {row_num}: {', '.join(invalid_fields)} geçersiz sayı")
+                # Mark row as error
+                self.tree.item(item_id, tags=('error_row',))
             
             row_data = {
-                'row_num': values[0],
+                'row_num': row_num,
                 'material_code': values[1],
-                'material_name': values[2],
-                'weight': float(values[3]) if values[3] else 0,
-                'solid_weight': float(values[4]) if values[4] else 0,
-                'price': float(values[5]) if values[5] else 0,
-                # Include hidden data for compatibility
-                'solid_content': row_info.get('solid_content', 1.0) * 100,
-                'unit_price': row_info.get('unit_price', 0),
+                'material_name': material_name,
+                'weight': weight,
+                'solid_pct': solid_pct,
+                'solid_weight': solid_weight,
+                'unit_price': unit_price,
+                'total_price': total_price,
+                # Include source type
+                'source_type': row_info.get('source_type', 'manual'),
+                'material_id': row_info.get('material_id'),
+                # Legacy compatibility
+                'solid_content': row_info.get('solid_content', 100),
+                # Validation status
+                '_valid': all([weight_valid, solid_valid, sw_valid, up_valid, tp_valid]),
             }
             
             data.append(row_data)
         
+        # Store errors for caller to check
+        self._last_validation_errors = errors
+        
         return data
     
+    def validate_and_get_data(self) -> Tuple[Optional[List[Dict]], List[str]]:
+        """
+        Get data with validation. Shows error message if invalid.
+        
+        Returns:
+            Tuple of (data, errors)
+            If errors exist, data is None and errors contains messages.
+        """
+        data = self.get_data()
+        errors = getattr(self, '_last_validation_errors', [])
+        
+        if errors:
+            messagebox.showerror(
+                "Geçersiz Giriş",
+                "Sayısal alanlarda hatalı değer var:\n\n" + "\n".join(errors[:5]) +
+                ("\n..." if len(errors) > 5 else "")
+            )
+            return None, errors
+        
+        return data, []
+    
+    def has_validation_errors(self) -> bool:
+        """Check if last get_data() had validation errors."""
+        return bool(getattr(self, '_last_validation_errors', []))
+    
+    def get_validation_errors(self) -> List[str]:
+        """Get validation errors from last get_data() call."""
+        return getattr(self, '_last_validation_errors', [])
+    
     def load_data(self, data: List[Dict]):
-        """Load data into the grid (auto-lookup if needed)"""
+        """
+        Load data into the grid (8-column format).
+        
+        Supports source_type detection and auto-lookup.
+        """
         self.clear_all()
         
         # Remove initial empty rows
@@ -640,36 +847,51 @@ class ExcelStyleGrid(ttk.Frame):
             # Support multiple input formats
             material_code = row.get('material_code', row.get('code', ''))
             material_name = row.get('material_name', row.get('material', row.get('name', '')))
-            weight = row.get('weight', row.get('quantity', row.get('amount', 0)))
-            solid_content = row.get('solid_content', 100) / 100  # ratio
-            unit_price = row.get('unit_price', 0)
+            weight = row.get('weight', row.get('quantity', row.get('amount', 0))) or 0
+            solid_pct = row.get('solid_pct', row.get('solid_content', 100)) or 100
+            unit_price = row.get('unit_price', 0) or 0
+            source_type = row.get('source_type', 'db')
             
             # Calculate derived values
-            solid_weight = weight * solid_content
-            price = weight * unit_price
+            solid_weight = weight * (solid_pct / 100)
+            total_price = weight * unit_price
+            
+            # Add manual marker if needed
+            display_name = material_name
+            if source_type == 'manual' and not display_name.startswith(self.MANUAL_MARKER):
+                display_name = f"{self.MANUAL_MARKER}{material_name}"
             
             values = (
                 str(self.row_count),
                 material_code,
-                material_name,
+                display_name,
                 f"{weight:.2f}" if weight else "",
+                f"{solid_pct:.0f}" if solid_pct else "",
                 f"{solid_weight:.2f}" if solid_weight > 0 else "",
-                f"{price:.2f}" if price > 0 else "",
+                f"{unit_price:.2f}" if unit_price else "",
+                f"{total_price:.2f}" if total_price > 0 else "",
             )
             
-            item_id = self.tree.insert('', 'end', values=values)
+            tags = ('db_row',) if source_type == 'db' else ('manual_row',)
+            item_id = self.tree.insert('', 'end', values=values, tags=tags)
             
-            # Store hidden data
+            # Store row data
             self.row_data[item_id] = {
-                'solid_content': solid_content,
-                'unit_price': unit_price
+                'source_type': source_type,
+                'solid_content': solid_pct,
+                'unit_price': unit_price,
+                'material_id': row.get('material_id'),
             }
         
         # Add empty rows
         self._ensure_empty_row()
     
     def get_totals(self) -> Dict:
-        """Get summary totals"""
+        """
+        Get summary totals.
+        
+        Column indices: 3=weight, 5=solid_weight, 7=total_price
+        """
         total_weight = 0
         total_solid = 0
         total_price = 0
@@ -685,9 +907,9 @@ class ExcelStyleGrid(ttk.Frame):
             row_count += 1
             
             try:
-                weight = float(values[3]) if values[3] else 0
-                solid = float(values[4]) if values[4] else 0
-                price = float(values[5]) if values[5] else 0
+                weight = float(values[3]) if len(values) > 3 and values[3] else 0
+                solid = float(values[5]) if len(values) > 5 and values[5] else 0
+                price = float(values[7]) if len(values) > 7 and values[7] else 0
                 
                 total_weight += weight
                 total_solid += solid
@@ -702,3 +924,4 @@ class ExcelStyleGrid(ttk.Frame):
             'solid_percent': (total_solid / total_weight * 100) if total_weight > 0 else 0,
             'row_count': row_count
         }
+

@@ -151,8 +151,8 @@ class NetworkChecker:
                 
                 if result == 0:
                     info['dns_reachable'].append(host)
-            except:
-                pass
+            except (socket.error, OSError):
+                pass  # DNS check failed - expected in offline mode
         
         return info
     
@@ -164,8 +164,8 @@ class NetworkChecker:
             ip = sock.getsockname()[0]
             sock.close()
             return ip
-        except:
-            return None
+        except (socket.error, OSError):
+            return None  # Could not determine local IP
     
     def wait_for_connection(self, max_wait: float = 60.0, check_interval: float = 5.0) -> bool:
         """

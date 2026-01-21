@@ -1,7 +1,10 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import logging
-from typing import Callable, Optional
+from typing import Callable, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.core.project_context import ProjectContext
 
 # Constants for Treeview Items
 TYPE_PROJECT = "project"
@@ -12,14 +15,21 @@ class SidebarNavigator(ttk.Frame):
     """
     Hierarchical Sidebar Navigation (Project > Concept > Variation)
     Mimics QTreeWidget behavior.
+    
+    Supports both:
+    - Legacy callback pattern (on_selection_change)
+    - ProjectContext pattern (context.project_id = ...)
     """
-    def __init__(self, parent, db_manager, on_selection_change: Callable, on_project_change: Callable = None):
+    def __init__(self, parent, db_manager, on_selection_change: Callable, 
+                 on_project_change: Callable = None,
+                 context: 'ProjectContext' = None):
         super().__init__(parent, width=250)
         self.pack_propagate(False) # Fixed width
         
         self.db_manager = db_manager
         self.on_selection_change = on_selection_change
         self.on_project_change = on_project_change  # Callback for project changes
+        self.context = context  # ProjectContext for unified state management
         
         self._create_ui()
         self.refresh()
@@ -156,6 +166,15 @@ class SidebarNavigator(ttk.Frame):
         
         if values:
             item_type, item_id = values[0], int(values[1])
+            
+            # Update ProjectContext if available (unified state management)
+            if self.context is not None:
+                if item_type == TYPE_PROJECT:
+                    self.context.project_id = item_id
+                elif item_type == TYPE_TRIAL:
+                    self.context.formulation_id = item_id
+            
+            # Always call legacy callback for backward compatibility
             self.on_selection_change(item_type, item_id)
             
     def _on_right_click(self, event):

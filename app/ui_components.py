@@ -16,6 +16,9 @@ from typing import Optional, Callable
 import threading
 import logging
 
+# Core architecture
+from src.core.project_context import ProjectContext, ContextEvent
+
 # Modüler bileşenlerden import (Yeni özellikler bu dosyalarda)
 from app.components.status_bar import StatusBar
 from app.components.project_panel import ProjectPanel
@@ -148,6 +151,10 @@ class PaintFormulationApp:
         height = config.getint('UI', 'window_height', fallback=800)
         self.root.geometry(f"{width}x{height}")
         
+        # Project Context (Single Source of Truth for project/formulation state)
+        self.context = ProjectContext(db_manager)
+        self.context.add_listener(self._on_context_changed)
+        
         # Tema
         self._setup_theme()
         
@@ -189,7 +196,8 @@ class PaintFormulationApp:
             self.sidebar_frame, 
             self.db_manager, 
             self._on_sidebar_selection,
-            on_project_change=self._refresh_all_panels
+            on_project_change=self._refresh_all_panels,
+            context=self.context  # Pass ProjectContext for unified state
         )
         self.sidebar.pack(fill=tk.BOTH, expand=True)
         self.main_paned.add(self.sidebar_frame, minsize=200)
@@ -240,17 +248,17 @@ class PaintFormulationApp:
         )
         self.formulation_editor.pack(fill=tk.BOTH, expand=True)
         
-        # === SEKME 4: Test Sonuçları ===
-        from app.test_results_panel import TestResultsPanel
+        # === SEKME 4: Test Sonuçları (V2 - Decision Support) ===
+        from app.test_results_panel_v2 import TestResultsPanelV2
         test_tab = ttk.Frame(self.notebook, padding=10)
         self.notebook.add(test_tab, text="🧪 Test Sonuçları")
         
-        self.test_results_panel = TestResultsPanel(
+        self.test_results_panel = TestResultsPanelV2(
             test_tab,
             on_save=self._on_save_test_results,
             on_load_formulations=self._on_load_formulations,
             on_load_trial=self._on_load_trial,
-            on_custom_method_changed=self._on_custom_method_changed
+            db_manager=self.db_manager
         )
         self.test_results_panel.pack(fill=tk.BOTH, expand=True)
         
@@ -585,6 +593,52 @@ class PaintFormulationApp:
             # Tüm panelleri yenile
             self._refresh_all_panels()
     
+    def _on_context_changed(self, event: ContextEvent, ctx):
+        """
+        ProjectContext değişikliklerine tepki ver.
+        
+        Bu metod tüm panelleri context değişikliklerinden haberdar eder.
+        EventBus patternı sayesinde her panel sadece ilgili event'leri dinler.
+        """
+        if event == ContextEvent.PROJECT_CHANGED:
+            # Proje değişti - tüm panelleri güncelle
+            project_name = ctx.project_name or "—"
+            self.status_bar.set_status(f"Proje seçildi: {project_name}")
+            
+            # Formülasyon editörünü güncelle
+            if hasattr(self, 'formulation_editor'):
+                self.formulation_editor.load_formulation_list(ctx.formulations)
+            
+            # Test sonuçları panelini güncelle
+            if hasattr(self, 'test_results_panel'):
+                self.test_results_panel.load_formulations(ctx.formulations)
+            
+            # ML panelini güncelle (proje model durumu için)
+            if hasattr(self, 'ml_panel') and hasattr(self.ml_panel, 'refresh_for_project'):
+                self.ml_panel.refresh_for_project(ctx.project_id)
+            
+            # Dashboard'u güncelle
+            self._refresh_dashboard()
+            
+            logger.info(f"Context: Project changed to {ctx.project_id} ({project_name}), {len(ctx.formulations)} formulations")
+            
+        elif event == ContextEvent.FORMULATION_CHANGED:
+            # Formülasyon değişti - detay panellerini güncelle
+            if ctx.formulation_id:
+                self.status_bar.set_status(f"Formülasyon: {ctx.formulation_code}")
+                
+                # Aktif sekmeye göre yükle
+                self._load_formulation_to_current_tab()
+            
+        elif event == ContextEvent.DATA_SAVED:
+            # Veri kaydedildi - ML öğrenme tetikle
+            self._trigger_background_learning(project_id=ctx.project_id)
+            
+        elif event == ContextEvent.ML_MODEL_UPDATED:
+            # ML modeli güncellendi
+            if hasattr(self, 'ml_panel'):
+                self.ml_panel.refresh()
+    
     def _refresh_all_panels(self):
         """Tüm panellerin proje ve formülasyon listelerini yenile"""
         try:
@@ -594,12 +648,19 @@ class PaintFormulationApp:
             # Formülasyon editörünü güncelle
             if hasattr(self, 'formulation_editor'):
                 self.formulation_editor.load_projects(projects)
+                # Context'e göre formülasyonları yükle
+                if self.context.project_id:
+                    self.formulation_editor.load_formulation_list(self.context.formulations)
             
             # Test sonuçları panelini güncelle
             if hasattr(self, 'test_results_panel'):
                 self.test_results_panel.load_projects(projects)
-                formulations = self.db_manager.get_active_formulations()
-                self.test_results_panel.load_formulations(formulations)
+                # Context'e göre formülasyonları yükle
+                if self.context.project_id:
+                    self.test_results_panel.load_formulations(self.context.formulations)
+                else:
+                    formulations = self.db_manager.get_active_formulations()
+                    self.test_results_panel.load_formulations(formulations)
             
             # Optimizasyon panelini güncelle
             if hasattr(self, 'optimization_panel'):

@@ -214,8 +214,8 @@ def format_datetime(dt: datetime, format_str: str = "%d.%m.%Y %H:%M") -> str:
     if isinstance(dt, str):
         try:
             dt = datetime.fromisoformat(dt)
-        except:
-            return dt
+        except ValueError:
+            return dt  # Invalid ISO format - return as-is
     
     return dt.strftime(format_str)
 

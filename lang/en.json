@@ -1,0 +1,122 @@
+{
+    "app_title": "Paint Formulation AI",
+    "menu": {
+        "file": "File",
+        "new_project": "New Project",
+        "import": "Import",
+        "export": "Export",
+        "settings": "Settings",
+        "exit": "Exit"
+    },
+    "tabs": {
+        "dashboard": "Dashboard",
+        "materials": "Materials",
+        "formulation": "Formulation",
+        "test_results": "Test Results",
+        "ml_center": "ML Center",
+        "comparison": "Comparison"
+    },
+    "sidebar": {
+        "project_navigator": "Project Navigator",
+        "new_project": "New Project",
+        "new_concept": "New Concept",
+        "new_trial": "New Trial",
+        "delete": "Delete",
+        "refresh": "Refresh"
+    },
+    "materials": {
+        "title": "Material Management",
+        "add": "Add Material",
+        "import_excel": "Import from Excel",
+        "code": "Code",
+        "name": "Name",
+        "category": "Category",
+        "categories": {
+            "resin": "Resin",
+            "pigment": "Pigment",
+            "solvent": "Solvent",
+            "additive": "Additive"
+        },
+        "properties": {
+            "physical": "Physical Properties",
+            "chemical": "Chemical Properties",
+            "optical": "Optical Properties",
+            "thermal": "Thermal Properties"
+        },
+        "density": "Density",
+        "solid_content": "Solid Content",
+        "viscosity": "Viscosity",
+        "oh_value": "OH Value",
+        "acid_value": "Acid Value"
+    },
+    "formulation": {
+        "title": "Formulation Editor",
+        "code": "Formula Code",
+        "name": "Formula Name",
+        "add_component": "Add Component",
+        "percentage": "Ratio (%)",
+        "total": "Total",
+        "calculate": "Calculate",
+        "save": "Save",
+        "clear": "Clear",
+        "predicted_quality": "Predicted Quality",
+        "estimated_cost": "Estimated Cost"
+    },
+    "tests": {
+        "title": "Test Results",
+        "groups": {
+            "mechanical": "Mechanical Tests",
+            "optical": "Optical Tests",
+            "chemical": "Chemical Tests",
+            "durability": "Durability Tests"
+        },
+        "hardness": "Hardness (König)",
+        "flexibility": "Flexibility",
+        "impact": "Impact Resistance",
+        "adhesion": "Adhesion",
+        "gloss": "Gloss",
+        "opacity": "Opacity",
+        "color_delta": "Color Difference (ΔE)",
+        "acid_resistance": "Acid Resistance",
+        "alkali_resistance": "Alkali Resistance",
+        "salt_spray": "Salt Spray",
+        "uv_resistance": "UV Resistance",
+        "include_in_ml": "Include in ML training"
+    },
+    "status": {
+        "good": "GOOD",
+        "medium": "MEDIUM",
+        "bad": "BAD",
+        "saved": "Saved",
+        "loading": "Loading...",
+        "error": "Error"
+    },
+    "ml": {
+        "title": "ML Center",
+        "project_model": "Project Model",
+        "global_model": "Global Model",
+        "confidence": "Confidence Score",
+        "train": "Train Model",
+        "last_trained": "Last Trained",
+        "samples": "Sample Count",
+        "suggestions": "Suggestions",
+        "no_model": "Model not trained yet"
+    },
+    "buttons": {
+        "save": "Save",
+        "cancel": "Cancel",
+        "delete": "Delete",
+        "edit": "Edit",
+        "close": "Close",
+        "apply": "Apply",
+        "reset": "Reset",
+        "copy": "Copy",
+        "paste": "Paste"
+    },
+    "dialogs": {
+        "confirm_delete": "Are you sure you want to delete?",
+        "unsaved_changes": "You have unsaved changes. Continue?",
+        "success": "Success",
+        "error": "An error occurred"
+    }
+}

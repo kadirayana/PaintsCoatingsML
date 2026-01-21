@@ -31,6 +31,7 @@ from .test_results_workflow import (
     generate_test_template,
     import_test_results
 )
+from .material_similarity import MaterialSimilarityEngine
 
 __all__ = [
     # Core managers
@@ -58,6 +59,8 @@ __all__ = [
     'TestImportValidationResult',
     'TestImportResult',
     'generate_test_template',
-    'import_test_results'
+    'import_test_results',
+    # Material Intelligence
+    'MaterialSimilarityEngine'
 ]
 

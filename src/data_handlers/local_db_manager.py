@@ -18,10 +18,6 @@ logger = logging.getLogger(__name__)
 class LocalDBManager:
     """SQLite veritabanı yöneticisi"""
     
-    # Malzeme önbelleği
-    _material_cache = {}
-    _material_cache_valid = False
-    
     def __init__(self, db_path: str):
         """
         Args:
@@ -29,7 +25,12 @@ class LocalDBManager:
         """
         self.db_path = db_path
         self._connection = None
-        self._invalidate_cache()
+        
+        # Instance-level cache (her instance kendi cache'ine sahip)
+        # Bu, sınıf değişkeni yerine instance değişkeni olarak tanımlandı
+        # Race condition ve paylaşılan state sorunlarını önler
+        self._material_cache: Dict = {}
+        self._material_cache_valid: bool = False
     
     def _invalidate_cache(self):
         self._material_cache = {}
@@ -80,8 +81,14 @@ class LocalDBManager:
             for col in ['customer_name', 'target_cost', 'deadline', 'status']:
                 try:
                     cursor.execute(f'ALTER TABLE projects ADD COLUMN {col} TEXT')
-                except Exception:
-                    pass
+                    logger.debug(f"Added column '{col}' to projects table")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" in str(e).lower():
+                        pass  # Column already exists - expected during migration
+                    else:
+                        logger.warning(f"Could not add column '{col}': {e}")
+                except Exception as e:
+                    logger.error(f"Unexpected error adding column '{col}': {e}")
 
             # 2. Parent Formulations (The "Concept")
             # This replaces the old use of 'formulations' as the recipe holder.
@@ -127,28 +134,26 @@ class LocalDBManager:
                 )
             ''')
             
-            # Add linkage column if missing
-            try:
-                cursor.execute('ALTER TABLE trials ADD COLUMN parent_formulation_id INTEGER REFERENCES parent_formulations(id)')
-            except Exception:
-                pass
-            try:
-                cursor.execute('ALTER TABLE trials ADD COLUMN trial_code TEXT')
-            except Exception:
-                pass
-            try:
-                cursor.execute('ALTER TABLE trials ADD COLUMN is_deleted INTEGER DEFAULT 0')
-            except Exception:
-                pass
-            try:
-                cursor.execute('ALTER TABLE trials ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
-            except Exception:
-                pass
-            # Also add is_deleted to parent_formulations for consistency
-            try:
-                cursor.execute('ALTER TABLE parent_formulations ADD COLUMN is_deleted INTEGER DEFAULT 0')
-            except Exception:
-                pass
+            # Add linkage column if missing - with proper error handling
+            migration_columns = [
+                ('trials', 'parent_formulation_id', 'INTEGER REFERENCES parent_formulations(id)'),
+                ('trials', 'trial_code', 'TEXT'),
+                ('trials', 'is_deleted', 'INTEGER DEFAULT 0'),
+                ('trials', 'created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'),
+                ('parent_formulations', 'is_deleted', 'INTEGER DEFAULT 0'),
+            ]
+            
+            for table, col, col_type in migration_columns:
+                try:
+                    cursor.execute(f'ALTER TABLE {table} ADD COLUMN {col} {col_type}')
+                    logger.debug(f"Added column '{col}' to {table} table")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" in str(e).lower():
+                        pass  # Column already exists - expected
+                    else:
+                        logger.warning(f"Could not add column '{col}' to {table}: {e}")
+                except Exception as e:
+                    logger.error(f"Unexpected error adding column '{col}' to {table}: {e}")
 
             # 4. Components (Ingredients)
             # CRITICAL CHANGE: Now linked to TRIALS (Variations), not Abstract Formulations.
@@ -164,13 +169,17 @@ class LocalDBManager:
                     FOREIGN KEY (trial_id) REFERENCES trials(id)
                 )
             ''')
-            # We can't easily rename formulation_id to trial_id in SQLite without recreating.
-            # For now, we assume 'formulation_id' in legacy components might correspond to 'trial_id' logic if we migrated.
-            # But strictly speaking, we need a new column.
+            # Components table migration
             try:
                 cursor.execute('ALTER TABLE components ADD COLUMN trial_id INTEGER REFERENCES trials(id)')
-            except Exception:
-                pass
+                logger.debug("Added column 'trial_id' to components table")
+            except sqlite3.OperationalError as e:
+                if "duplicate column name" in str(e).lower():
+                    pass  # Column already exists
+                else:
+                    logger.warning(f"Could not add column 'trial_id' to components: {e}")
+            except Exception as e:
+                logger.error(f"Unexpected error adding column 'trial_id' to components: {e}")
             
             # 5. Materials (Shared Master Data - No Change)
             cursor.execute('''
@@ -202,6 +211,20 @@ class LocalDBManager:
                     is_incomplete INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # 6. Legacy Formulations Table (for backward compatibility)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS formulations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER,
+                    formula_code TEXT,
+                    formula_name TEXT,
+                    status TEXT DEFAULT 'draft',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (project_id) REFERENCES projects(id)
                 )
             ''')
             
@@ -241,6 +264,39 @@ class LocalDBManager:
                 )
             ''')
             
+            # Test sonuçları tablosu (FIX: Bu tablo eksikti ve hata veriyordu)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS test_results (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    trial_id INTEGER NOT NULL,
+                    test_type TEXT,
+                    test_value REAL,
+                    test_unit TEXT,
+                    test_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    notes TEXT,
+                    FOREIGN KEY (trial_id) REFERENCES trials(id)
+                )
+            ''')
+            
+            # ML Models tablosu - Proje bazlı ve global model takibi
+            # Bu tablo file system deki model dosyalarının DB kaydını tutar
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ml_models (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER,              -- NULL = global model
+                    model_type TEXT NOT NULL,        -- 'project' veya 'global'
+                    version TEXT NOT NULL,           -- 'v001', 'v002', etc.
+                    target_name TEXT,                -- 'quality_score', 'corrosion', etc.
+                    file_path TEXT NOT NULL,         -- Model dosya yolu
+                    r2_score REAL,
+                    samples_count INTEGER,
+                    trained_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_active INTEGER DEFAULT 1,     -- Aktif model mi?
+                    metadata TEXT,                   -- JSON: feature_importance, params
+                    FOREIGN KEY (project_id) REFERENCES projects(id)
+                )
+            ''')
+            
             # Eksik sütunları ekle (Migration)
             self._migrate_db(cursor)
             self._create_indexes(cursor)
@@ -248,26 +304,102 @@ class LocalDBManager:
             logger.info("Veritabanı tabloları başarıyla oluşturuldu")
 
     def _migrate_db(self, cursor):
-        """Eksik sütunları eklemek için basit bir migrasyon"""
+        """
+        Eksik sütunları eklemek için güvenli migrasyon.
+        
+        SQLite Limitation: ALTER TABLE cannot use non-constant defaults like CURRENT_TIMESTAMP.
+        Solution: Add column without default, then backfill existing rows.
+        """
         # Trials table migrations
         cursor.execute("PRAGMA table_info(trials)")
         cols = [col[1] for col in cursor.fetchall()]
+        
         if 'coating_thickness' not in cols:
             cursor.execute("ALTER TABLE trials ADD COLUMN coating_thickness REAL")
         if 'flexibility' not in cols:
             cursor.execute("ALTER TABLE trials ADD COLUMN flexibility REAL")
         
-        # Materials table migrations - add is_incomplete flag for lazy creation
+        # FIX: created_at sütunu - SQLite doesn't allow CURRENT_TIMESTAMP in ALTER TABLE
+        # Pattern: 1) Add without default, 2) Backfill, 3) Application handles NULL via COALESCE
+        if 'created_at' not in cols:
+            try:
+                # Step 1: Add column WITHOUT default (SQLite safe)
+                cursor.execute("ALTER TABLE trials ADD COLUMN created_at TIMESTAMP")
+                logger.info("Added 'created_at' column to trials table")
+                
+                # Step 2: Backfill existing rows using trial_date as fallback
+                cursor.execute("""
+                    UPDATE trials 
+                    SET created_at = COALESCE(trial_date, datetime('now'))
+                    WHERE created_at IS NULL
+                """)
+                backfilled = cursor.rowcount
+                if backfilled > 0:
+                    logger.info(f"Backfilled {backfilled} rows with created_at timestamps")
+            except Exception as e:
+                # Don't crash on migration - log and continue
+                logger.warning(f"created_at migration warning: {e}")
+        
+        # Materials table migrations - INTEGER DEFAULT 0 is constant, so this is safe
         cursor.execute("PRAGMA table_info(materials)")
         mat_cols = [col[1] for col in cursor.fetchall()]
         if 'is_incomplete' not in mat_cols:
             cursor.execute("ALTER TABLE materials ADD COLUMN is_incomplete INTEGER DEFAULT 0")
             logger.info("Added 'is_incomplete' column to materials table")
+        
+        # Extended TDS properties for Material Intelligence System
+        tds_columns = [
+            ('acid_value', 'REAL'),
+            ('amine_value', 'REAL'),
+            ('viscosity_mpa_s', 'REAL'),
+            ('flash_point', 'REAL'),
+            ('color_index', 'TEXT'),
+            ('refractive_index', 'REAL'),
+            ('material_type', 'TEXT'),
+            ('tds_source', 'TEXT'),
+            ('is_reactive', 'INTEGER DEFAULT 0'),
+            ('is_crosslinker', 'INTEGER DEFAULT 0'),
+            # Extensible JSON field for future properties without schema changes
+            ('custom_properties', 'TEXT'),  # JSON format
+        ]
+        for col_name, col_type in tds_columns:
+            if col_name not in mat_cols:
+                try:
+                    cursor.execute(f"ALTER TABLE materials ADD COLUMN {col_name} {col_type}")
+                    logger.debug(f"Added '{col_name}' column to materials table")
+                except Exception as e:
+                    logger.debug(f"Column {col_name} migration skipped: {e}")
 
     def _create_indexes(self, cursor):
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_formulations_project ON formulations(project_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_components_formulation ON components(formulation_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_trials_formulation ON trials(formulation_id)")
+        """Create database indexes for better query performance"""
+        indexes = [
+            # Mevcut indexler
+            ("idx_formulations_project", "formulations(project_id)"),
+            ("idx_components_formulation", "components(formulation_id)"),
+            ("idx_trials_formulation", "trials(formulation_id)"),
+            ("idx_trials_parent", "trials(parent_formulation_id)"),
+            ("idx_parent_formulations_project", "parent_formulations(project_id)"),
+            
+            # YENİ - Performans iyileştirmesi için eklenen indexler
+            ("idx_materials_code", "materials(code)"),
+            ("idx_materials_name", "materials(name)"),
+            ("idx_materials_category", "materials(category)"),
+            ("idx_trials_quality_score", "trials(quality_score)"),
+            ("idx_trials_created_at", "trials(created_at)"),
+            ("idx_projects_is_active", "projects(is_active)"),
+            ("idx_components_trial_id", "components(trial_id)"),
+            ("idx_materials_is_incomplete", "materials(is_incomplete)"),
+        ]
+        
+        for index_name, index_def in indexes:
+            try:
+                cursor.execute(f"CREATE INDEX IF NOT EXISTS {index_name} ON {index_def}")
+                logger.debug(f"Index oluşturuldu: {index_name}")
+            except sqlite3.OperationalError as e:
+                # Table or column might not exist in fresh DB - just skip
+                logger.debug(f"Could not create index {index_name}: {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected error creating index {index_name}: {e}")
 
     # === PROJE İŞLEMLERİ ===
     
@@ -286,12 +418,217 @@ class LocalDBManager:
             cursor.execute('SELECT * FROM projects WHERE is_active = 1 ORDER BY updated_at DESC')
             return [dict(row) for row in cursor.fetchall()]
 
+    def get_project(self, project_id: int) -> Optional[Dict]:
+        """Get a single project by ID"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM projects WHERE id = ? AND is_active = 1', (project_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
     def get_project_by_name(self, name: str) -> Optional[Dict]:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM projects WHERE name = ? AND is_active = 1', (name,))
             row = cursor.fetchone()
             return dict(row) if row else None
+
+    def get_formulations(self, project_id: int) -> List[Dict]:
+        """
+        Get all formulations/trials for a project.
+        
+        Returns formulations with valid formula_code, filtered for ComboBox display.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Get trials linked to this project via parent_formulations
+            cursor.execute('''
+                SELECT t.id, t.trial_code as formula_code, 
+                       pf.concept_name as formula_name, t.quality_score,
+                       t.created_at, pf.project_id
+                FROM trials t
+                JOIN parent_formulations pf ON t.parent_formulation_id = pf.id
+                WHERE pf.project_id = ?
+                  AND (t.is_deleted = 0 OR t.is_deleted IS NULL)
+                  AND t.trial_code IS NOT NULL
+                  AND t.trial_code != ''
+                ORDER BY t.created_at DESC
+            ''', (project_id,))
+            
+            results = [dict(row) for row in cursor.fetchall()]
+            
+            # Also get legacy formulations table entries
+            cursor.execute('''
+                SELECT id, formula_code, formula_name, created_at
+                FROM formulations
+                WHERE project_id = ?
+                  AND formula_code IS NOT NULL
+                  AND formula_code != ''
+                ORDER BY created_at DESC
+            ''', (project_id,))
+            
+            for row in cursor.fetchall():
+                # Avoid duplicates
+                if not any(r['id'] == row['id'] for r in results):
+                    results.append(dict(row))
+            
+            return results
+
+    def get_formulation(self, formulation_id: int) -> Optional[Dict]:
+        """
+        Get a single formulation by ID.
+        
+        Args:
+            formulation_id: Formulation ID
+            
+        Returns:
+            Formulation dict or None
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT id, project_id, formula_code, formula_name, 
+                       created_at, updated_at, status
+                FROM formulations
+                WHERE id = ?
+            ''', (formulation_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def get_formulation_by_code(self, formula_code: str, project_id: int = None) -> Optional[Dict]:
+        """
+        Find formulation by code, optionally within a project.
+        
+        Args:
+            formula_code: Formula code to find
+            project_id: Optional project filter
+            
+        Returns:
+            Formulation dict or None
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if project_id:
+                cursor.execute('''
+                    SELECT id, project_id, formula_code, formula_name, 
+                           created_at, updated_at, status
+                    FROM formulations
+                    WHERE formula_code = ? AND project_id = ?
+                ''', (formula_code, project_id))
+            else:
+                cursor.execute('''
+                    SELECT id, project_id, formula_code, formula_name, 
+                           created_at, updated_at, status
+                    FROM formulations
+                    WHERE formula_code = ?
+                ''', (formula_code,))
+            
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def save_formulation(self, data: Dict) -> int:
+        """
+        Create or update a formulation.
+        
+        If 'id' is in data, updates existing. Otherwise creates new.
+        
+        Args:
+            data: {project_id, formula_code, formula_name, components?, status?}
+            
+        Returns:
+            Formulation ID
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            formulation_id = data.get('id')
+            
+            if formulation_id:
+                # Update existing
+                cursor.execute('''
+                    UPDATE formulations 
+                    SET formula_code = ?,
+                        formula_name = ?,
+                        status = ?,
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                ''', (
+                    data.get('formula_code'),
+                    data.get('formula_name'),
+                    data.get('status', 'saved'),
+                    formulation_id
+                ))
+            else:
+                # Create new
+                cursor.execute('''
+                    INSERT INTO formulations (project_id, formula_code, formula_name, status, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+                ''', (
+                    data['project_id'],
+                    data.get('formula_code'),
+                    data.get('formula_name'),
+                    data.get('status', 'saved')
+                ))
+                formulation_id = cursor.lastrowid
+            
+            # Handle components if provided
+            components = data.get('components', [])
+            if components:
+                # Clear existing
+                cursor.execute('DELETE FROM formulation_materials WHERE formulation_id = ?', (formulation_id,))
+                
+                # Insert new
+                for comp in components:
+                    cursor.execute('''
+                        INSERT INTO formulation_materials (formulation_id, material_id, percentage, weight)
+                        VALUES (?, ?, ?, ?)
+                    ''', (
+                        formulation_id,
+                        comp.get('material_id'),
+                        comp.get('percentage', 0),
+                        comp.get('weight', 0)
+                    ))
+            
+            logger.info(f"Saved formulation {formulation_id}: {data.get('formula_code')}")
+            return formulation_id
+
+    def get_formulation_with_components(self, formulation_id: int) -> Optional[Dict]:
+        """
+        Get formulation with its material components.
+        
+        Returns:
+            {id, formula_code, formula_name, components: [{material_id, code, name, weight, ...}]}
+        """
+        formulation = self.get_formulation(formulation_id)
+        if not formulation:
+            return None
+        
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT fm.material_id, fm.percentage, fm.weight,
+                       m.code, m.name, m.solid_content, m.unit_price
+                FROM formulation_materials fm
+                LEFT JOIN materials m ON fm.material_id = m.id
+                WHERE fm.formulation_id = ?
+            ''', (formulation_id,))
+            
+            components = []
+            for row in cursor.fetchall():
+                components.append({
+                    'material_id': row['material_id'],
+                    'material_code': row['code'],
+                    'material_name': row['name'],
+                    'percentage': row['percentage'],
+                    'weight': row['weight'],
+                    'solid_content': row['solid_content'],
+                    'unit_price': row['unit_price'],
+                })
+            
+            formulation['components'] = components
+            return formulation
 
     def delete_project_by_name(self, name: str, cascade: bool = True) -> bool:
         """
@@ -525,11 +862,12 @@ class LocalDBManager:
             except Exception as e:
                 logger.error(f"V2 Update failed: {e}")
 
-            # Update Legacy Formulations (Safety net)
+            # Update Legacy Formulations (Safety net) - Whitelist approach
+            ALLOWED_FIELDS = {'formula_name', 'formula_code', 'status'}
             fields = []
             values = []
             for k, v in data.items():
-                if k in ['formula_name', 'formula_code', 'status']: # Only update core fields
+                if k in ALLOWED_FIELDS:
                     fields.append(f"{k} = ?")
                     values.append(v)
             
@@ -537,8 +875,11 @@ class LocalDBManager:
                 values.append(formulation_id)
                 try:
                     conn.execute(f"UPDATE formulations SET {', '.join(fields)} WHERE id = ?", values)
-                except Exception:
-                    pass
+                    logger.debug(f"Legacy formulation updated: id={formulation_id}")
+                except sqlite3.Error as e:
+                    logger.warning(f"Legacy formulation update failed: id={formulation_id}, error={e}")
+                except Exception as e:
+                    logger.error(f"Unexpected error updating legacy formulation {formulation_id}: {e}")
 
     def delete_formulation(self, formulation_id: int):
         with self.get_connection() as conn:
@@ -555,6 +896,8 @@ class LocalDBManager:
         Fetches the complete hierarchy for the sidebar:
         Projects -> Parent Formulations -> Trials
         
+        OPTIMIZED: Uses single JOIN query instead of N+1 pattern
+        
         Returns:
             List of Project dicts, each containing:
                 - 'concepts': List of Parent Formulations, each containing:
@@ -563,31 +906,86 @@ class LocalDBManager:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
-            # 1. Get Active Projects
-            cursor.execute('SELECT * FROM projects WHERE is_active = 1 ORDER BY updated_at DESC')
-            projects = [dict(row) for row in cursor.fetchall()]
+            # Single query to fetch entire hierarchy
+            cursor.execute('''
+                SELECT 
+                    p.id as project_id,
+                    p.name as project_name,
+                    p.description as project_description,
+                    p.updated_at as project_updated_at,
+                    p.status as project_status,
+                    pf.id as concept_id,
+                    pf.concept_name,
+                    pf.concept_code,
+                    pf.created_at as concept_created_at,
+                    t.id as trial_id,
+                    t.trial_code,
+                    t.trial_date,
+                    t.total_cost,
+                    t.quality_score,
+                    t.notes as trial_notes
+                FROM projects p
+                LEFT JOIN parent_formulations pf ON p.id = pf.project_id 
+                    AND (pf.is_deleted = 0 OR pf.is_deleted IS NULL)
+                LEFT JOIN trials t ON pf.id = t.parent_formulation_id
+                    AND (t.is_deleted = 0 OR t.is_deleted IS NULL)
+                WHERE p.is_active = 1
+                ORDER BY p.updated_at DESC, pf.created_at DESC, t.trial_date DESC
+            ''')
             
-            for project in projects:
-                # 2. Get Concepts (Parent Formulations) for each project
-                cursor.execute('''
-                    SELECT * FROM parent_formulations 
-                    WHERE project_id = ? 
-                    ORDER BY created_at DESC
-                ''', (project['id'],))
-                concepts = [dict(row) for row in cursor.fetchall()]
-                project['concepts'] = concepts
+            rows = cursor.fetchall()
+            
+            # Build hierarchy in Python (more efficient than N+1)
+            projects_dict = {}
+            
+            for row in rows:
+                row = dict(row)
+                project_id = row['project_id']
+                concept_id = row['concept_id']
+                trial_id = row['trial_id']
                 
-                for concept in concepts:
-                    # 3. Get Trials (Variations) for each concept
-                    cursor.execute('''
-                        SELECT * FROM trials 
-                        WHERE parent_formulation_id = ? 
-                        ORDER BY trial_date DESC
-                    ''', (concept['id'],))
-                    trials = [dict(row) for row in cursor.fetchall()]
-                    concept['trials'] = trials
+                # Add/update project
+                if project_id not in projects_dict:
+                    projects_dict[project_id] = {
+                        'id': project_id,
+                        'name': row['project_name'],
+                        'description': row['project_description'],
+                        'updated_at': row['project_updated_at'],
+                        'status': row['project_status'],
+                        'concepts': {}
+                    }
+                
+                project = projects_dict[project_id]
+                
+                # Add concept (if exists)
+                if concept_id:
+                    if concept_id not in project['concepts']:
+                        project['concepts'][concept_id] = {
+                            'id': concept_id,
+                            'concept_name': row['concept_name'],
+                            'concept_code': row['concept_code'],
+                            'created_at': row['concept_created_at'],
+                            'trials': []
+                        }
                     
-            return projects
+                    # Add trial (if exists)
+                    if trial_id:
+                        project['concepts'][concept_id]['trials'].append({
+                            'id': trial_id,
+                            'trial_code': row['trial_code'],
+                            'trial_date': row['trial_date'],
+                            'total_cost': row['total_cost'],
+                            'quality_score': row['quality_score'],
+                            'notes': row['trial_notes']
+                        })
+            
+            # Convert dicts to lists for output
+            result = []
+            for project in projects_dict.values():
+                project['concepts'] = list(project['concepts'].values())
+                result.append(project)
+            
+            return result
 
     # === BİLEŞEN İŞLEMLERİ (V2 Schema Support) ===
     
@@ -604,13 +1002,17 @@ class LocalDBManager:
                     VALUES (?, ?, ?, ?, ?, ?)
                 ''', (owner_id, data['component_name'], data.get('component_type', ''), 
                       data.get('amount', 0), data.get('unit', 'kg'), data.get('percentage', 0)))
-            except Exception:
-                # Fallback implementation if schema not fully migrated or for legacy constraint
+            except sqlite3.OperationalError as e:
+                # Fallback to legacy schema if trial_id column doesn't exist
+                logger.debug(f"Falling back to legacy schema for component insert: {e}")
                 conn.execute('''
                     INSERT INTO components (formulation_id, component_name, component_type, amount, unit, percentage)
                     VALUES (?, ?, ?, ?, ?, ?)
                 ''', (owner_id, data['component_name'], data.get('component_type', ''), 
                       data.get('amount', 0), data.get('unit', 'kg'), data.get('percentage', 0)))
+            except Exception as e:
+                logger.error(f"Failed to add component: {e}")
+                raise
 
     def get_formulation_materials(self, formulation_id: int) -> List[Dict]:
         """Get materials for a trial (variation)"""
@@ -933,9 +1335,14 @@ class LocalDBManager:
             cursor = conn.cursor()
             cursor.execute('SELECT COUNT(*) as c FROM formulations')
             total = cursor.fetchone()['c']
-            # Count distinct formulas that have at least one trial
-            cursor.execute("SELECT COUNT(DISTINCT formulation_id) as c FROM trials WHERE formulation_id IS NOT NULL")
-            tested = cursor.fetchone()['c']
+            
+            # Count trials that have test results (V2 schema)
+            try:
+                cursor.execute("SELECT COUNT(*) as c FROM trials WHERE quality_score IS NOT NULL")
+                tested = cursor.fetchone()['c']
+            except sqlite3.OperationalError:
+                tested = 0
+            
             # Count formulas added this month
             cursor.execute("SELECT COUNT(*) as c FROM formulations WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')")
             this_month = cursor.fetchone()['c']
@@ -972,15 +1379,21 @@ class LocalDBManager:
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                SELECT t.*, pf.concept_name, p.name as project_name
-                FROM trials t
-                LEFT JOIN parent_formulations pf ON t.parent_formulation_id = pf.id
-                LEFT JOIN projects p ON pf.project_id = p.id
-                WHERE t.is_deleted = 0 OR t.is_deleted IS NULL
-                ORDER BY t.created_at DESC
-            ''')
-            return [dict(row) for row in cursor.fetchall()]
+            try:
+                cursor.execute('''
+                    SELECT t.*, pf.concept_name, p.name as project_name
+                    FROM trials t
+                    LEFT JOIN parent_formulations pf ON t.parent_formulation_id = pf.id
+                    LEFT JOIN projects p ON pf.project_id = p.id
+                    WHERE t.is_deleted = 0 OR t.is_deleted IS NULL
+                    ORDER BY COALESCE(t.created_at, t.trial_date) DESC
+                ''')
+                return [dict(row) for row in cursor.fetchall()]
+            except sqlite3.OperationalError as e:
+                # Fallback: simpler query if columns missing
+                logger.warning(f"get_all_formulations fallback due to: {e}")
+                cursor.execute('SELECT * FROM trials WHERE is_deleted = 0 OR is_deleted IS NULL')
+                return [dict(row) for row in cursor.fetchall()]
     
     def get_formulations_this_month(self) -> List[Dict]:
         """
@@ -991,16 +1404,25 @@ class LocalDBManager:
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                SELECT t.*, pf.concept_name, p.name as project_name
-                FROM trials t
-                LEFT JOIN parent_formulations pf ON t.parent_formulation_id = pf.id
-                LEFT JOIN projects p ON pf.project_id = p.id
-                WHERE (t.is_deleted = 0 OR t.is_deleted IS NULL)
-                  AND strftime('%Y-%m', t.created_at) = strftime('%Y-%m', 'now')
-                ORDER BY t.created_at DESC
-            ''')
-            return [dict(row) for row in cursor.fetchall()]
+            try:
+                cursor.execute('''
+                    SELECT t.*, pf.concept_name, p.name as project_name
+                    FROM trials t
+                    LEFT JOIN parent_formulations pf ON t.parent_formulation_id = pf.id
+                    LEFT JOIN projects p ON pf.project_id = p.id
+                    WHERE (t.is_deleted = 0 OR t.is_deleted IS NULL)
+                      AND strftime('%Y-%m', COALESCE(t.created_at, t.trial_date)) = strftime('%Y-%m', 'now')
+                    ORDER BY COALESCE(t.created_at, t.trial_date) DESC
+                ''')
+                return [dict(row) for row in cursor.fetchall()]
+            except sqlite3.OperationalError as e:
+                # Fallback: use trial_date only
+                logger.warning(f"get_formulations_this_month fallback due to: {e}")
+                cursor.execute('''
+                    SELECT * FROM trials 
+                    WHERE strftime('%Y-%m', trial_date) = strftime('%Y-%m', 'now')
+                ''')
+                return [dict(row) for row in cursor.fetchall()]
     
     def get_formulations_without_trials(self) -> List[Dict]:
         """
@@ -1012,17 +1434,27 @@ class LocalDBManager:
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                SELECT t.*, pf.concept_name, p.name as project_name
-                FROM trials t
-                LEFT JOIN parent_formulations pf ON t.parent_formulation_id = pf.id
-                LEFT JOIN projects p ON pf.project_id = p.id
-                LEFT JOIN test_results tr ON t.id = tr.trial_id
-                WHERE tr.id IS NULL
-                  AND (t.is_deleted = 0 OR t.is_deleted IS NULL)
-                ORDER BY t.created_at DESC
-            ''')
-            return [dict(row) for row in cursor.fetchall()]
+            try:
+                cursor.execute('''
+                    SELECT t.*, pf.concept_name, p.name as project_name
+                    FROM trials t
+                    LEFT JOIN parent_formulations pf ON t.parent_formulation_id = pf.id
+                    LEFT JOIN projects p ON pf.project_id = p.id
+                    LEFT JOIN test_results tr ON t.id = tr.trial_id
+                    WHERE tr.id IS NULL
+                      AND (t.is_deleted = 0 OR t.is_deleted IS NULL)
+                    ORDER BY COALESCE(t.created_at, t.trial_date) DESC
+                ''')
+                return [dict(row) for row in cursor.fetchall()]
+            except sqlite3.OperationalError as e:
+                # Fallback: return trials without quality_score as "pending"
+                logger.warning(f"get_formulations_without_trials fallback due to: {e}")
+                cursor.execute('''
+                    SELECT * FROM trials 
+                    WHERE quality_score IS NULL 
+                      AND (is_deleted = 0 OR is_deleted IS NULL)
+                ''')
+                return [dict(row) for row in cursor.fetchall()]
 
     def find_nearest_trial(self, params: Dict) -> Optional[Dict]:
         return None # Basitleştirildi
@@ -1030,3 +1462,170 @@ class LocalDBManager:
     def import_data(self, data: List[Dict]):
         for row in data:
             self.save_trial(row)
+
+    # =========================================================================
+    # ML MODEL YÖNETİMİ
+    # =========================================================================
+    
+    def get_training_data(self, project_id: int = None) -> List[Dict]:
+        """
+        ML eğitimi için veri çek.
+        
+        Args:
+            project_id: Belirtilirse sadece o projenin verisi, None ise tüm projeler
+            
+        Returns:
+            Eğitim için uygun trial listesi (kalite skoru olan)
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if project_id is not None:
+                # Proje bazlı veri
+                cursor.execute('''
+                    SELECT t.*, c.component_name, c.percentage, c.component_type,
+                           pf.concept_name, p.name as project_name
+                    FROM trials t
+                    JOIN parent_formulations pf ON t.parent_formulation_id = pf.id
+                    JOIN projects p ON pf.project_id = p.id
+                    LEFT JOIN components c ON c.trial_id = t.id
+                    WHERE p.id = ?
+                      AND t.quality_score IS NOT NULL
+                      AND (t.is_deleted = 0 OR t.is_deleted IS NULL)
+                    ORDER BY t.id
+                ''', (project_id,))
+            else:
+                # Global veri (tüm projeler)
+                cursor.execute('''
+                    SELECT t.*, c.component_name, c.percentage, c.component_type,
+                           pf.concept_name, p.name as project_name
+                    FROM trials t
+                    LEFT JOIN parent_formulations pf ON t.parent_formulation_id = pf.id
+                    LEFT JOIN projects p ON pf.project_id = p.id
+                    LEFT JOIN components c ON c.trial_id = t.id
+                    WHERE t.quality_score IS NOT NULL
+                      AND (t.is_deleted = 0 OR t.is_deleted IS NULL)
+                    ORDER BY t.id
+                ''')
+            
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def save_ml_model(self, project_id: int, model_type: str, version: str,
+                      target_name: str, file_path: str, r2_score: float = None,
+                      samples_count: int = None, metadata: Dict = None) -> int:
+        """
+        ML model kaydı oluştur.
+        
+        Args:
+            project_id: Proje ID (None = global model)
+            model_type: 'project' veya 'global'
+            version: Model versiyonu (örn: 'v001')
+            target_name: Hedef değişken adı
+            file_path: Model dosya yolu
+            r2_score: Model R² skoru
+            samples_count: Eğitim örnek sayısı
+            metadata: Ek bilgiler (JSON olarak kaydedilir)
+        
+        Returns:
+            Yeni model ID'si
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Aynı proje/target için önceki modelleri deaktif et
+            cursor.execute('''
+                UPDATE ml_models 
+                SET is_active = 0 
+                WHERE project_id IS ? AND target_name = ?
+            ''', (project_id, target_name))
+            
+            # Yeni modeli ekle
+            cursor.execute('''
+                INSERT INTO ml_models 
+                (project_id, model_type, version, target_name, file_path, 
+                 r2_score, samples_count, metadata, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+            ''', (
+                project_id, model_type, version, target_name, file_path,
+                r2_score, samples_count, 
+                json.dumps(metadata) if metadata else None
+            ))
+            
+            logger.info(f"ML model saved: {model_type} {version} for project {project_id}")
+            return cursor.lastrowid
+    
+    def get_latest_ml_model(self, project_id: int = None, target_name: str = None) -> Optional[Dict]:
+        """
+        En son aktif ML modelini getir.
+        
+        Args:
+            project_id: Proje ID (None = global model)
+            target_name: Hedef değişken (None = herhangi biri)
+        
+        Returns:
+            Model kaydı veya None
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if target_name:
+                cursor.execute('''
+                    SELECT * FROM ml_models 
+                    WHERE project_id IS ? AND target_name = ? AND is_active = 1
+                    ORDER BY trained_at DESC LIMIT 1
+                ''', (project_id, target_name))
+            else:
+                cursor.execute('''
+                    SELECT * FROM ml_models 
+                    WHERE project_id IS ? AND is_active = 1
+                    ORDER BY trained_at DESC LIMIT 1
+                ''', (project_id,))
+            
+            row = cursor.fetchone()
+            if row:
+                result = dict(row)
+                if result.get('metadata'):
+                    result['metadata'] = json.loads(result['metadata'])
+                return result
+            return None
+    
+    def get_all_ml_models(self, project_id: int = None, include_inactive: bool = False) -> List[Dict]:
+        """
+        Proje için tüm ML modellerini getir.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if include_inactive:
+                cursor.execute('''
+                    SELECT * FROM ml_models 
+                    WHERE project_id IS ?
+                    ORDER BY trained_at DESC
+                ''', (project_id,))
+            else:
+                cursor.execute('''
+                    SELECT * FROM ml_models 
+                    WHERE project_id IS ? AND is_active = 1
+                    ORDER BY trained_at DESC
+                ''', (project_id,))
+            
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def deactivate_ml_models(self, project_id: int = None, target_name: str = None):
+        """
+        ML modellerini deaktif et (rollback için).
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if target_name:
+                cursor.execute('''
+                    UPDATE ml_models SET is_active = 0 
+                    WHERE project_id IS ? AND target_name = ?
+                ''', (project_id, target_name))
+            else:
+                cursor.execute('''
+                    UPDATE ml_models SET is_active = 0 
+                    WHERE project_id IS ?
+                ''', (project_id,))
+

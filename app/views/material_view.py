@@ -489,8 +489,8 @@ class MaterialManagementPanel(ttk.Frame):
                 try:
                     self.material_tree.selection_set(str(self.current_material_id))
                     self.material_tree.see(str(self.current_material_id))
-                except:
-                    pass
+                except (tk.TclError, ValueError):
+                    pass  # Tree item may not exist yet
             
             # Callback
             if self.on_material_change:

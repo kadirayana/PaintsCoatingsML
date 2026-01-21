@@ -166,8 +166,8 @@ class TrialListDialog(tk.Toplevel):
                 if val is not None:
                     try:
                         values[key].append(float(val))
-                    except:
-                        pass
+                    except (ValueError, TypeError):
+                        pass  # Non-numeric value - skip
         
         # İstatistik penceresi
         stats_window = tk.Toplevel(self)

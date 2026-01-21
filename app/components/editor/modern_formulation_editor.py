@@ -758,47 +758,140 @@ class ModernFormulationEditor(ttk.LabelFrame):
     
     def load_formulation(self, data: Dict):
         """Load formulation into editor"""
-        # Set header fields
-        self.formula_code_entry.delete(0, tk.END)
-        self.formula_code_entry.insert(0, data.get('formula_code', ''))
-        
-        self.formula_name_entry.delete(0, tk.END)
-        self.formula_name_entry.insert(0, data.get('formula_name', ''))
-        
-        # Load components
-        components = data.get('components', data.get('materials', []))
-        self.grid.load_data(components)
-        
-        self._update_summary()
+        try:
+            # Set header fields - ensure values are strings, not None
+            formula_code = data.get('formula_code') or data.get('trial_code') or ''
+            formula_name = data.get('formula_name') or data.get('concept_name') or ''
+            
+            self.formula_code_entry.delete(0, tk.END)
+            if formula_code:  # Only insert if there's a value
+                self.formula_code_entry.insert(0, str(formula_code))
+            
+            self.formula_name_entry.delete(0, tk.END)
+            if formula_name:  # Only insert if there's a value
+                self.formula_name_entry.insert(0, str(formula_name))
+            
+            # Load components
+            components = data.get('components', data.get('materials', []))
+            if components:
+                self.grid.load_data(components)
+            
+            self._update_summary()
+            
+        except Exception as e:
+            logger.error(f"Error loading formulation: {e}")
+            # Don't propagate error - just log it
     
     def load_projects(self, projects: List):
         """Load projects into dropdown"""
         if isinstance(projects, list):
             if projects and isinstance(projects[0], dict):
-                names = [p.get('name', '') for p in projects]
+                names = [p.get('name', '') for p in projects if p.get('name')]
             else:
-                names = projects
+                names = [p for p in projects if p]  # Filter empty strings
             
             self.project_combo['values'] = names
     
     def load_formulation_list(self, formulations: List):
-        """Load formulations into dropdown"""
-        self.formulation_list = formulations
+        """
+        Load VALID formulations into dropdown.
         
+        Filters out:
+        - Entries without ID (not saved to DB)
+        - Entries without valid formula_code
+        - Entries with 'None' or placeholder codes
+        """
+        self.formulation_list = []
         display_values = []
+        
         for f in formulations:
-            code = f.get('formula_code', '')
-            name = f.get('formula_name', '')
+            # FILTER 1: Must have valid ID (saved to DB)
+            fid = f.get('id')
+            if not fid or fid == 'None':
+                continue
+            
+            # FILTER 2: Must have valid formula_code
+            code = f.get('formula_code') or f.get('trial_code') or ''
+            code = str(code).strip()
+            
+            # FILTER 3: Skip None, empty, or placeholder codes
+            if not code or code.lower() in ['none', 'null', '-', '']:
+                continue
+            
+            # FILTER 4: Skip codes that look like auto-generated placeholders
+            if code.startswith('-V') or code.startswith('None-'):
+                continue
+            
+            # Valid entry - add to list
+            name = f.get('formula_name') or f.get('concept_name') or ''
+            name = str(name).strip() if name else ''
+            
             display = f"{code} - {name}" if name else code
             f['display'] = display
+            
+            self.formulation_list.append(f)
             display_values.append(display)
         
         self.formulation_combo['values'] = display_values
+        
+        # Clear current selection if it's no longer valid
+        current = self.formulation_combo.get()
+        if current and current not in display_values:
+            self.formulation_combo.set('')
+        
+        logger.debug(f"Loaded {len(display_values)} valid formulations (filtered from {len(formulations)})")
+    
+    def _clear_form(self):
+        """
+        Clear form for new formulation (draft state).
+        
+        This method:
+        - Clears all input fields
+        - Resets grid
+        - Does NOT create any DB record
+        - Keeps project selection
+        """
+        # Clear formula fields
+        self.formula_code_entry.delete(0, tk.END)
+        self.formula_name_entry.delete(0, tk.END)
+        
+        # Clear grid
+        self.grid.clear_all()
+        
+        # Update summary
+        self._update_summary()
+        
+        # Clear ComboBox selection (we're creating new, not editing existing)
+        self.formulation_combo.set('')
+        
+        logger.debug("Form cleared for new formulation (draft state)")
+    
+    def start_new_formulation(self):
+        """
+        Start a new formulation in draft state.
+        
+        Public API for creating new formulation without touching DB.
+        """
+        self._clear_form()
     
     def get_current_project(self) -> Optional[str]:
         """Get current project name"""
         return self.current_project
     
+    def get_current_project_id(self) -> Optional[int]:
+        """Get current project ID"""
+        return self.current_project_id
+    
+    def set_project(self, project_id: int, project_name: str):
+        """Set current project (called by context)"""
+        self.current_project_id = project_id
+        self.current_project = project_name
+        
+        # Update ComboBox selection
+        if project_name and project_name in self.project_combo['values']:
+            self.project_combo.set(project_name)
+    
     def set_prediction_callback(self, callback: Callable):
         """Set prediction callback"""
         self.on_predict = callback
+

@@ -23,18 +23,22 @@ class PassiveMLPanel(ttk.Frame):
     
     Displays ML insights and suggestions without manual training controls.
     Automatically updates when background learning completes.
+    
+    Now integrated with ProjectContext for reactive updates.
     """
     
     def __init__(
         self,
         parent,
         db_manager=None,
+        project_context=None,
         on_get_project_suggestions: Callable = None,
         on_get_global_trends: Callable = None
     ):
         super().__init__(parent)
         
         self.db_manager = db_manager
+        self.project_context = project_context
         self.on_get_project_suggestions = on_get_project_suggestions
         self.on_get_global_trends = on_get_global_trends
         
@@ -43,8 +47,18 @@ class PassiveMLPanel(ttk.Frame):
         self._is_learning = False
         self._feature_importance = {}
         self._learned_rules = []
+        self._project_list = []
         
         self._create_ui()
+        
+        # Load projects from DB on init
+        self._load_projects_from_db()
+        
+        # Sync with ProjectContext if provided
+        if self.project_context:
+            self._sync_with_context()
+            # Listen to context events
+            self.project_context.add_listener(self._on_context_event)
         
         # Initial refresh
         self.after(1000, self._refresh_insights)
@@ -192,8 +206,11 @@ class PassiveMLPanel(ttk.Frame):
         self.suggestions_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
     
     def _on_project_changed(self, event=None):
-        """Handle project selection change"""
+        """Handle project selection change from dropdown"""
         selection = self.project_combo.get()
+        if not selection:
+            return
+        
         if hasattr(self, '_project_list'):
             for p in self._project_list:
                 if p.get('name') == selection:
@@ -201,19 +218,99 @@ class PassiveMLPanel(ttk.Frame):
                     self.current_project_name = selection
                     break
         
+        # Sync to ProjectContext (if available)
+        if self.project_context and self.current_project_id:
+            # Only update if different to avoid infinite loops
+            if self.project_context.project_id != self.current_project_id:
+                self.project_context.project_id = self.current_project_id
+        
         # Refresh suggestions for new project
         self._refresh_suggestions()
     
     # === Public Methods ===
     
+    def _load_projects_from_db(self):
+        """Load projects from database"""
+        if not self.db_manager:
+            return
+        
+        try:
+            if hasattr(self.db_manager, 'get_all_projects'):
+                projects = self.db_manager.get_all_projects()
+            elif hasattr(self.db_manager, 'list_projects'):
+                projects = self.db_manager.list_projects()
+            else:
+                projects = []
+            
+            self.load_projects(projects)
+        except Exception as e:
+            logger.warning(f"Failed to load projects: {e}")
+    
+    def _sync_with_context(self):
+        """Sync dropdown with ProjectContext"""
+        if not self.project_context:
+            return
+        
+        ctx_project_id = self.project_context.project_id
+        if ctx_project_id and ctx_project_id != self.current_project_id:
+            # Find project in list and select it
+            for p in self._project_list:
+                if p.get('id') == ctx_project_id:
+                    self.current_project_id = ctx_project_id
+                    self.current_project_name = p.get('name')
+                    self.project_combo.set(p.get('name', ''))
+                    self._refresh_suggestions()
+                    break
+    
+    def _on_context_event(self, event, ctx):
+        """Handle ProjectContext events"""
+        from src.core.project_context import ContextEvent
+        
+        if event == ContextEvent.PROJECT_CHANGED:
+            self._sync_with_context()
+        elif event == ContextEvent.FORMULATION_SAVED:
+            self._refresh_insights()
+        elif event == ContextEvent.ML_MODEL_UPDATED:
+            self._refresh_insights()
+    
+    def refresh_for_project(self, project_id: int):
+        """
+        Refresh ML panel for a specific project.
+        
+        Called externally when project changes.
+        """
+        if project_id == self.current_project_id:
+            return
+        
+        self.current_project_id = project_id
+        
+        # Update dropdown
+        for p in self._project_list:
+            if p.get('id') == project_id:
+                self.current_project_name = p.get('name')
+                self.project_combo.set(p.get('name', ''))
+                break
+        
+        # Refresh all insights
+        self._refresh_insights()
+    
+    def refresh(self):
+        """Full refresh of panel"""
+        self._refresh_insights()
+    
     def load_projects(self, projects: list):
         """Load projects into dropdown"""
-        self._project_list = projects
-        project_names = [p.get('name', '') for p in projects if p.get('name')]
+        self._project_list = projects or []
+        project_names = [p.get('name', '') for p in self._project_list if p.get('name')]
         self.project_combo['values'] = project_names
+        
         if project_names:
-            self.project_combo.current(0)
-            self._on_project_changed()
+            # If we have a current project, select it
+            if self.current_project_name and self.current_project_name in project_names:
+                self.project_combo.set(self.current_project_name)
+            else:
+                self.project_combo.current(0)
+                self._on_project_changed()
     
     def set_learning_status(self, is_learning: bool):
         """Update the AI status indicator"""
