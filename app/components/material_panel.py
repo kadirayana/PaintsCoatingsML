@@ -16,11 +16,13 @@ import logging
 import json
 
 from app.theme import COLORS, ICONS, configure_treeview_tags
+from src.core.i18n import t, I18nMixin
+from src.core.translation_keys import TK
 
 logger = logging.getLogger(__name__)
 
 
-class MaterialManagementPanel(ttk.Frame):
+class MaterialManagementPanel(ttk.Frame, I18nMixin):
     """
     Malzeme Yönetim Paneli
     
@@ -82,8 +84,12 @@ class MaterialManagementPanel(ttk.Frame):
         self.current_material_id = None
         self.materials = []
         
+        self.setup_i18n()
+        
         # Track form field frames for dynamic visibility
         self.field_frames = {}  # field_name -> frame widget
+        self.section_header_labels = {} # section_id -> Label widget
+        self.field_labels = {} # field_name -> Label widget
         self.section_frames = {}  # section_name -> (header_frame, separator)
         
         self._create_widgets()
@@ -96,11 +102,11 @@ class MaterialManagementPanel(ttk.Frame):
         main_paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # === Sol Panel - Malzeme Listesi ===
-        left_frame = ttk.LabelFrame(main_paned, text="📦 Malzemeler", padding=5)
-        main_paned.add(left_frame, weight=1)
+        self.left_frame = ttk.LabelFrame(main_paned, padding=5)
+        main_paned.add(self.left_frame, weight=1)
         
         # Filtre alanı
-        filter_frame = ttk.Frame(left_frame)
+        filter_frame = ttk.Frame(self.left_frame)
         filter_frame.pack(fill=tk.X, pady=(0, 5))
         
         ttk.Label(filter_frame, text="🔍").pack(side=tk.LEFT)
@@ -108,25 +114,21 @@ class MaterialManagementPanel(ttk.Frame):
         self.search_var.trace('w', lambda *args: self._filter_materials())
         ttk.Entry(filter_frame, textvariable=self.search_var, width=20).pack(side=tk.LEFT, padx=5)
         
-        ttk.Label(filter_frame, text="Kategori:").pack(side=tk.LEFT, padx=(10, 0))
-        self.category_var = tk.StringVar(value="Tümü")
-        category_combo = ttk.Combobox(filter_frame, textvariable=self.category_var, 
-                                       values=["Tümü"] + self.CATEGORIES, state='readonly', width=12)
-        category_combo.pack(side=tk.LEFT, padx=5)
-        category_combo.bind('<<ComboboxSelected>>', lambda e: self._filter_materials())
+        self.filter_cat_label = ttk.Label(filter_frame)
+        self.filter_cat_label.pack(side=tk.LEFT, padx=(10, 0))
+        self.category_var = tk.StringVar()
+        self.category_combo = ttk.Combobox(filter_frame, textvariable=self.category_var, 
+                                       state='readonly', width=12)
+        self.category_combo.pack(side=tk.LEFT, padx=5)
+        self.category_combo.bind('<<ComboboxSelected>>', lambda e: self._filter_materials())
         
         # Malzeme listesi
-        list_frame = ttk.Frame(left_frame)
+        list_frame = ttk.Frame(self.left_frame)
         list_frame.pack(fill=tk.BOTH, expand=True)
         
         columns = ('name', 'category', 'price')
         self.material_tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=15)
-        self.material_tree.heading('name', text='Malzeme Adı')
-        self.material_tree.heading('category', text='Kategori')
-        self.material_tree.heading('price', text='Fiyat')
-        self.material_tree.column('name', width=150)
-        self.material_tree.column('category', width=80)
-        self.material_tree.column('price', width=70)
+        # Headings updated in _update_texts
         
         scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.material_tree.yview)
         self.material_tree.configure(yscrollcommand=scrollbar.set)
@@ -137,20 +139,23 @@ class MaterialManagementPanel(ttk.Frame):
         self.material_tree.bind('<<TreeviewSelect>>', self._on_material_select)
         
         # Liste butonları - with themed styling
-        btn_frame = ttk.Frame(left_frame)
+        btn_frame = ttk.Frame(self.left_frame)
         btn_frame.pack(fill=tk.X, pady=(5, 0))
         
-        ttk.Button(btn_frame, text=f"{ICONS['add']} Yeni", command=self._new_material, width=10).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text=f"{ICONS['refresh']} Yenile", command=self._load_materials, width=10).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text=f"{ICONS['import']} Import", command=self._import_materials, width=10).pack(side=tk.LEFT, padx=2)
+        self.new_btn = ttk.Button(btn_frame, command=self._new_material, width=10)
+        self.new_btn.pack(side=tk.LEFT, padx=2)
+        self.refresh_btn = ttk.Button(btn_frame, command=self._load_materials, width=10)
+        self.refresh_btn.pack(side=tk.LEFT, padx=2)
+        self.import_btn = ttk.Button(btn_frame, command=self._import_materials, width=10)
+        self.import_btn.pack(side=tk.LEFT, padx=2)
         
         # === Sağ Panel - Malzeme Detayları ===
-        right_frame = ttk.LabelFrame(main_paned, text="⚗️ Malzeme Detayları", padding=10)
-        main_paned.add(right_frame, weight=2)
+        self.right_frame = ttk.LabelFrame(main_paned, padding=10)
+        main_paned.add(self.right_frame, weight=2)
         
         # Scrollable form
-        canvas = tk.Canvas(right_frame, highlightthickness=0)
-        scrollbar_r = ttk.Scrollbar(right_frame, orient=tk.VERTICAL, command=canvas.yview)
+        canvas = tk.Canvas(self.right_frame, highlightthickness=0)
+        scrollbar_r = ttk.Scrollbar(self.right_frame, orient=tk.VERTICAL, command=canvas.yview)
         self.form_frame = ttk.Frame(canvas)
         
         canvas.configure(yscrollcommand=scrollbar_r.set)
@@ -211,17 +216,85 @@ class MaterialManagementPanel(ttk.Frame):
         save_frame = ttk.Frame(self.form_frame)
         save_frame.pack(fill=tk.X, pady=(20, 5))
         
-        ttk.Button(save_frame, text=f"{ICONS['save']} Kaydet", command=self._save_material, 
-                   style="Primary.TButton").pack(side=tk.LEFT, padx=5)
-        ttk.Button(save_frame, text=f"{ICONS['delete']} Sil", command=self._delete_material,
-                   style="Danger.TButton").pack(side=tk.LEFT, padx=5)
-        ttk.Button(save_frame, text=f"{ICONS['clear']} Temizle", command=self._clear_form).pack(side=tk.LEFT, padx=5)
+        self.save_btn = ttk.Button(save_frame, command=self._save_material, 
+                   style="Primary.TButton")
+        self.save_btn.pack(side=tk.LEFT, padx=5)
+        self.delete_btn = ttk.Button(save_frame, command=self._delete_material,
+                   style="Danger.TButton")
+        self.delete_btn.pack(side=tk.LEFT, padx=5)
+        self.clear_btn = ttk.Button(save_frame, command=self._clear_form)
+        self.clear_btn.pack(side=tk.LEFT, padx=5)
+        
+        self._update_texts()
+    
+    def _update_texts(self):
+        """Update UI texts for i18n"""
+        self.left_frame.config(text=t(TK.NAV_MATERIALS))
+        self.right_frame.config(text=t(TK.MAT_TITLE))
+        
+        self.filter_cat_label.config(text=t(TK.MAT_CATEGORY))
+        current_filter = self.category_var.get()
+        filter_vals = [t(TK.MAT_FILTER_ALL)] + self.CATEGORIES
+        self.category_combo.config(values=filter_vals)
+        if not current_filter or current_filter == "Tümü" or current_filter == "All":
+             self.category_var.set(t(TK.MAT_FILTER_ALL))
+
+        # Headings
+        self.material_tree.heading('name', text=t(TK.MAT_NAME).strip('*: '))
+        self.material_tree.heading('category', text=t(TK.MAT_CATEGORY).strip(': '))
+        self.material_tree.heading('price', text=t(TK.MAT_UNIT_PRICE).strip(': '))
+        
+        # Buttons
+        self.new_btn.config(text=f"{ICONS['add']} " + t(TK.common_add if hasattr(TK, 'common_add') else TK.ADD)) # Fix if TK.common_add is used
+        self.refresh_btn.config(text=f"{ICONS['refresh']} " + t(TK.REFRESH))
+        self.import_btn.config(text=f"{ICONS['import']} " + t(TK.FORM_IMPORT))
+        self.save_btn.config(text=f"{ICONS['save']} " + t(TK.SAVE))
+        self.delete_btn.config(text=f"{ICONS['delete']} " + t(TK.DELETE))
+        self.clear_btn.config(text=f"{ICONS['clear'] if 'clear' in ICONS else ''} " + t(TK.FORM_CLEAN))
+
+        # Section Headers
+        section_titles = {
+            "basic": TK.MAT_BASIC_INFO,
+            "physical": TK.MAT_PHYSICAL_PROP,
+            "chemical": TK.MAT_CHEMICAL_PROP,
+            "limits": TK.MAT_LIMITS,
+            "pigment": TK.MAT_PIGMENT_PROP,
+            "solvent": TK.MAT_SOLVENT_PROP,
+            "cost": TK.MAT_COST
+        }
+        for sid, label in self.section_header_labels.items():
+             label.config(text=t(section_titles.get(sid, sid)))
+
+        # Field Labels
+        field_keys = {
+            "name": TK.MAT_NAME,
+            "category": TK.MAT_CATEGORY,
+            "code": TK.MAT_CODE,
+            "density": TK.MAT_DENSITY,
+            "solid_content": TK.MAT_SOLID_CONTENT,
+            "molecular_weight": TK.MAT_MOL_WEIGHT,
+            "ph": TK.MAT_PH,
+            "oh_value": TK.MAT_OH_VALUE,
+            "glass_transition": TK.MAT_TG,
+            "min_limit": TK.MAT_MIN_LIMIT,
+            "max_limit": TK.MAT_MAX_LIMIT,
+            "oil_absorption": TK.MAT_OIL_ABSORPTION,
+            "particle_size": TK.MAT_PARTICLE_SIZE,
+            "boiling_point": TK.MAT_BOILING_POINT,
+            "evaporation_rate": TK.MAT_EVAPORATION_RATE,
+            "voc_g_l": TK.MAT_VOC,
+            "unit_price": TK.MAT_UNIT_PRICE
+        }
+        for fname, label in self.field_labels.items():
+             label.config(text=t(field_keys.get(fname, fname)))
     
     def _add_section(self, section_id: str, title: str):
         """Bölüm başlığı ekle - with tracking for visibility"""
         header_frame = ttk.Frame(self.form_frame)
         header_frame.pack(fill=tk.X, pady=(15, 5))
-        ttk.Label(header_frame, text=title, font=('Segoe UI', 10, 'bold')).pack(anchor='w')
+        lbl = ttk.Label(header_frame, text=title, font=('Segoe UI', 10, 'bold'))
+        lbl.pack(anchor='w')
+        self.section_header_labels[section_id] = lbl
         
         separator = ttk.Separator(self.form_frame, orient='horizontal')
         separator.pack(fill=tk.X, pady=2)
@@ -235,7 +308,9 @@ class MaterialManagementPanel(ttk.Frame):
         frame.pack(fill=tk.X, pady=2)
         
         lbl_text = f"{label}:" if tooltip is None else f"{label} ({tooltip}):"
-        ttk.Label(frame, text=lbl_text, width=25).pack(side=tk.LEFT)
+        lbl = ttk.Label(frame, text=lbl_text, width=25)
+        lbl.pack(side=tk.LEFT)
+        self.field_labels[name] = lbl
         
         var = tk.StringVar()
         entry = ttk.Entry(frame, textvariable=var, width=width)
@@ -249,7 +324,9 @@ class MaterialManagementPanel(ttk.Frame):
         frame = ttk.Frame(self.form_frame)
         frame.pack(fill=tk.X, pady=2)
         
-        ttk.Label(frame, text=f"{label}:", width=25).pack(side=tk.LEFT)
+        lbl = ttk.Label(frame, width=25)
+        lbl.pack(side=tk.LEFT)
+        self.field_labels[name] = lbl
         
         var = tk.StringVar()
         combo = ttk.Combobox(frame, textvariable=var, values=values, width=width, state='readonly')
@@ -507,7 +584,7 @@ class MaterialManagementPanel(ttk.Frame):
             return
         
         name = self.entries['name'].get()
-        if not messagebox.askyesno("Onay", f"'{name}' malzemesini silmek istediğinizden emin misiniz?"):
+        if not messagebox.askyesno(t(TK.common_confirm if hasattr(TK, 'common_confirm') else TK.CONFIRM), t(TK.MSG_DELETE_CONFIRM).replace('{item}', f"'{name}'")):
             return
         
         try:
@@ -532,6 +609,80 @@ class MaterialManagementPanel(ttk.Frame):
         """Yeni malzeme formu"""
         self._clear_form()
         self.current_material_id = None
+    
+    def _update_texts(self):
+        """Update texts for i18n"""
+        # Search label
+        if hasattr(self, 'search_label'):
+            self.search_label.config(text=t(TK.MAT_SEARCH))
+        
+        # Category filter labels
+        if hasattr(self, 'cat_label'):
+            self.cat_label.config(text=t(TK.MAT_CATEGORY))
+        
+        # All filter
+        if hasattr(self, 'category_listbox'):
+            # This is harder as it's a listbox, but we can update static labels
+            pass
+
+        # Treeview headers
+        if hasattr(self, 'tree'):
+            self.tree.heading("name", text=t(TK.MAT_NAME))
+            self.tree.heading("code", text=t(TK.MAT_CODE))
+            self.tree.heading("category", text=t(TK.MAT_CATEGORY))
+            self.tree.heading("density", text=t(TK.MAT_DENSITY))
+            self.tree.heading("solid", text=t(TK.MAT_SOLID_CONTENT))
+            self.tree.heading("price", text=t(TK.MAT_COST))
+
+        # Detail Panel Headers
+        for key, widget in self.section_header_labels.items():
+            # key is section identifier like 'basic', 'physical'
+            # Map section name to TK key
+            section_map = {
+                'basic': TK.MAT_BASIC_INFO,
+                'physical': TK.MAT_PHYSICAL_PROP,
+                'chemical': TK.MAT_CHEMICAL_PROP,
+                'limits': TK.MAT_LIMITS,
+                'pigment': TK.MAT_PIGMENT_PROP,
+                'solvent': TK.MAT_SOLVENT_PROP,
+                'cost': TK.MAT_COST
+            }
+            if key in section_map:
+                widget.config(text=t(section_map[key]))
+
+        # Field Labels
+        field_map = {
+            'name': TK.MAT_NAME,
+            'code': TK.MAT_CODE,
+            'category': TK.MAT_CATEGORY,
+            'density': TK.MAT_DENSITY,
+            'solid_content': TK.MAT_SOLID_CONTENT,
+            'unit_price': TK.MAT_UNIT_PRICE,
+            'ph': TK.MAT_PH,
+            'molecular_weight': TK.MAT_MOL_WEIGHT,
+            'glass_transition': TK.MAT_TG,
+            'oh_value': TK.MAT_OH_VALUE,
+            'min_limit': TK.MAT_MIN_LIMIT,
+            'max_limit': TK.MAT_MAX_LIMIT,
+            'oil_absorption': TK.MAT_OIL_ABSORPTION,
+            'particle_size': TK.MAT_PARTICLE_SIZE,
+            'boiling_point': TK.MAT_BOILING_POINT,
+            'evaporation_rate': TK.MAT_EVAPORATION_RATE,
+            'voc_g_l': TK.MAT_VOC
+        }
+        for key, widget in self.field_labels.items():
+            if key in field_map:
+                widget.config(text=t(field_map[key]) + ":")
+
+        # Buttons
+        if hasattr(self, 'save_btn'):
+            self.save_btn.config(text=t(TK.SAVE))
+        if hasattr(self, 'delete_btn'):
+            self.delete_btn.config(text=t(TK.DELETE))
+        if hasattr(self, 'import_btn'):
+            self.import_btn.config(text=f"{ICONS['import']} Excel {t(TK.FORM_IMPORT)}")
+        if hasattr(self, 'export_btn'):
+            self.export_btn.config(text=f"{ICONS['export']} Excel {t(TK.FORM_EXPORT)}")
     
     def _clear_form(self):
         """Formu temizle"""

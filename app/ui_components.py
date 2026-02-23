@@ -12,9 +12,12 @@ import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from configparser import ConfigParser
-from typing import Optional, Callable
+from typing import Optional, Callable, Dict, List
 import threading
 import logging
+
+from src.core.i18n import t, I18nMixin, I18n
+from src.core.translation_keys import TK
 
 # Core architecture
 from src.core.project_context import ProjectContext, ContextEvent
@@ -134,13 +137,18 @@ class TrialRecordPanel(ttk.LabelFrame):
         self.notes_text.delete(1.0, tk.END)
 
 
-class PaintFormulationApp:
+class PaintFormulationApp(I18nMixin):
     """Ana uygulama sınıfı"""
     def __init__(self, config: ConfigParser, db_manager, network_checker, app_dir: str):
         self.config = config
         self.db_manager = db_manager
         self.network_checker = network_checker
         self.app_dir = app_dir
+        
+        # Initialize i18n
+        lang = config.get('Application', 'language', fallback='tr')
+        I18n().load(lang)
+        self.setup_i18n()
         
         # Ana pencere
         self.root = tk.Tk()
@@ -158,6 +166,9 @@ class PaintFormulationApp:
         # Tema
         self._setup_theme()
         
+        # Menü Sistemi
+        self._create_menu()
+        
         # UI oluştur
         self._create_ui()
         
@@ -173,6 +184,69 @@ class PaintFormulationApp:
         
         if theme == 'dark':
             apply_dark_theme(self.root)
+            
+    def _update_texts(self):
+        """Tüm ana UI metinlerini güncelle"""
+        logger.info(f"MainApp._update_texts called. Current lang: {get_i18n().current_language}")
+        # Menü isimlerini güncelle
+        self.menubar.entryconfig(0, label=t(TK.MENU_FILE))
+        self.menubar.entryconfig(1, label=t(TK.MENU_SETTINGS))
+        
+        self.file_menu.entryconfig(0, label=t(TK.MENU_EXIT))
+        self.settings_menu.entryconfig(0, label=t(TK.SETTINGS_LANGUAGE))
+        
+        # Notebook sekmelerini güncelle
+        all_tabs = self.notebook.tabs()
+        nav_keys = [TK.NAV_DASHBOARD, TK.NAV_MATERIALS, TK.NAV_FORMULATIONS, 
+                    TK.NAV_TEST_RESULTS, TK.NAV_ML_CENTER, TK.NAV_OPTIMIZATION]
+        
+        for i, key in enumerate(nav_keys):
+            if i < len(all_tabs):
+                tab_id = all_tabs[i]
+                new_text = t(key)
+                logger.info(f"MainApp: Updating notebook tab {i} (widget: {tab_id}) to '{new_text}' (key: {key})")
+                self.notebook.tab(tab_id, text=new_text)
+        
+        # Explicitly refresh sub-panels just in case
+        for attr in ['dashboard', 'material_panel', 'formulation_editor', 
+                     'test_results_panel', 'ml_panel', 'comparison_panel',
+                     'sidebar', 'status_bar']:
+            if hasattr(self, attr):
+                panel = getattr(self, attr)
+                if hasattr(panel, '_update_texts'):
+                    panel._update_texts()
+
+        # Force refresh UI
+        self.root.update_idletasks()
+
+    def _create_menu(self):
+        """Uygulama menüsünü oluştur"""
+        self.menubar = tk.Menu(self.root)
+        self.root.config(menu=self.menubar)
+        
+        # Dosya Menüsü
+        self.file_menu = tk.Menu(self.menubar, tearoff=0)
+        self.menubar.add_cascade(menu=self.file_menu, label=t(TK.MENU_FILE))
+        self.file_menu.add_command(label=t(TK.MENU_EXIT), command=self.root.quit)
+        
+        # Ayarlar/Dil Menüsü
+        self.settings_menu = tk.Menu(self.menubar, tearoff=0)
+        self.menubar.add_cascade(menu=self.settings_menu, label=t(TK.MENU_SETTINGS))
+        
+        self.lang_menu = tk.Menu(self.settings_menu, tearoff=0)
+        self.settings_menu.add_cascade(menu=self.lang_menu, label=t(TK.SETTINGS_LANGUAGE))
+        
+        self.lang_var = tk.StringVar(value=I18n()._lang)
+        self.lang_menu.add_radiobutton(label="Türkçe", variable=self.lang_var, value="tr", command=lambda: self._switch_language("tr"))
+        self.lang_menu.add_radiobutton(label="English", variable=self.lang_var, value="en", command=lambda: self._switch_language("en"))
+
+    def _switch_language(self, lang: str):
+        """Dil değiştir ve konfigürasyona kaydet"""
+        from src.core.i18n import switch_language
+        if switch_language(lang):
+            self.config.set('Application', 'language', lang)
+            self._update_texts() # Refresh tab names and menus immediately
+
     
     def _create_ui(self):
         """Kullanıcı arayüzünü oluştur (Split Layout: Sidebar + Content)"""
@@ -215,7 +289,7 @@ class PaintFormulationApp:
         
         # === SEKME 1: Ana Sayfa (Dashboard) ===
         main_tab = ttk.Frame(self.notebook, padding=10)
-        self.notebook.add(main_tab, text=f"{ICONS['home']} Proje Dashboard")
+        self.notebook.add(main_tab, text=t(TK.NAV_DASHBOARD))
         
         # Dashboard Content
         self.dashboard = DashboardPanel(main_tab, self._on_dashboard_navigate)
@@ -223,7 +297,7 @@ class PaintFormulationApp:
 
         # === SEKME 2: Malzemeler ===
         material_tab = ttk.Frame(self.notebook, padding=10)
-        self.notebook.add(material_tab, text=f"{ICONS['materials']} Malzemeler")
+        self.notebook.add(material_tab, text=t(TK.NAV_MATERIALS))
         
         self.material_panel = MaterialManagementPanel(
             material_tab,
@@ -235,7 +309,7 @@ class PaintFormulationApp:
         # === SEKME 3: Formülasyon Editörü ===
         from app.components.editor.modern_formulation_editor import ModernFormulationEditor
         formulation_tab = ttk.Frame(self.notebook, padding=10)
-        self.notebook.add(formulation_tab, text=f"{ICONS['formula']} Formülasyon")
+        self.notebook.add(formulation_tab, text=t(TK.NAV_FORMULATIONS))
         
         self.formulation_editor = ModernFormulationEditor(
             formulation_tab, 
@@ -251,7 +325,7 @@ class PaintFormulationApp:
         # === SEKME 4: Test Sonuçları (V2 - Decision Support) ===
         from app.test_results_panel_v2 import TestResultsPanelV2
         test_tab = ttk.Frame(self.notebook, padding=10)
-        self.notebook.add(test_tab, text="🧪 Test Sonuçları")
+        self.notebook.add(test_tab, text=t(TK.NAV_TEST_RESULTS))
         
         self.test_results_panel = TestResultsPanelV2(
             test_tab,
@@ -265,7 +339,7 @@ class PaintFormulationApp:
         # === SEKME 5: ML Merkezi (Passive Assistant) ===
         from app.components.passive_ml_panel import PassiveMLPanel
         ml_tab = ttk.Frame(self.notebook)
-        self.notebook.add(ml_tab, text=f"{ICONS['ml']} ML Merkezi")
+        self.notebook.add(ml_tab, text=t(TK.NAV_ML_CENTER))
         
         self.ml_panel = PassiveMLPanel(
             ml_tab,
@@ -278,7 +352,7 @@ class PaintFormulationApp:
         # === SEKME 6: Karşılaştırma ===
         from app.components.comparison_panel import VariationComparisonPanel
         comp_tab = ttk.Frame(self.notebook)
-        self.notebook.add(comp_tab, text="⚖️ Karşılaştırma") 
+        self.notebook.add(comp_tab, text=t(TK.NAV_OPTIMIZATION)) 
         self.comparison_panel = VariationComparisonPanel(comp_tab, self.db_manager)
         self.comparison_panel.pack(fill=tk.BOTH, expand=True)
         
@@ -294,21 +368,21 @@ class PaintFormulationApp:
             # Show Dashboard
             self.active_project_id = item_id
             self.notebook.select(0) # Main Tab
-            self.status_bar.update_status(f"Proje seçildi: ID {item_id}")
+            self.status_bar.update_status(f"{t(TK.FORM_PROJECT)} {t(TK.common_success if hasattr(TK, 'common_success') else TK.SUCCESS)}: ID {item_id}")
             # TODO: Refresh dashboard for this project
             
         elif item_type == TYPE_CONCEPT:
             # Show Concept Comparison
-            self.notebook.select(3) # Comparison Tab (Index 3)
+            self.notebook.select(5) # Comparison Tab (Index 5)
             self.comparison_panel.load_concept(item_id)
-            self.status_bar.update_status(f"Konsept Karşılaştırması: ID {item_id}")
+            self.status_bar.update_status(f"{t(TK.NAV_OPTIMIZATION)}: ID {item_id}")
             
         elif item_type == TYPE_TRIAL:
             # Load Trial into Editor
             self.notebook.select(2)  # Formülasyon Tab (Index 2)
             self.active_formulation_id = item_id # Maps to trial_id in V2
             self._on_load_detailed_formulation(item_id)
-            self.status_bar.update_status(f"Deneme yükleniyor: ID {item_id}")
+            self.status_bar.set_status(f"{t(TK.FORM_SAVED_FORMULAS)} {t(TK.common_loading if hasattr(TK, 'common_loading') else TK.LOADING)}: ID {item_id}")
             
         elif item_type == "new_trial_request":
             # Parent ID is passed as item_id
@@ -317,7 +391,7 @@ class PaintFormulationApp:
             # We should set context that we are creating for this parent
             self.active_project_id = None # Concept linkage handles it?
             self.formulation_editor.current_parent_id = item_id # TODO: Handle this in editor
-            self.status_bar.update_status("Yeni Varyasyon Oluşturuluyor...")
+            self.status_bar.set_status(t(TK.FORM_NEW_VARIATION))
     
     def _load_initial_data(self):
         """Başlangıç verilerini yükle"""
@@ -375,7 +449,7 @@ class PaintFormulationApp:
                 self.advanced_ml_panel.load_projects(projects)
                 logger.info("advanced_ml_panel'e projeler yüklendi")
             
-            self.status_bar.set_status("Veriler yüklendi")
+            self.status_bar.set_status(t(TK.MSG_OPERATION_COMPLETE if hasattr(TK, 'MSG_OPERATION_COMPLETE') else TK.SUCCESS))
             logger.info("Tüm başlangıç verileri yüklendi")
         except Exception as e:
             logger.error(f"Veri yükleme hatası: {str(e)}", exc_info=True)
@@ -492,7 +566,7 @@ class PaintFormulationApp:
             status = learner.get_model_status()
             
             if not status.get('trained'):
-                return ["Proje modeli henüz eğitilmedi. Daha fazla formülasyon ve test verisi ekleyin."]
+                return [t(TK.ML_EMPTY_RULES)]
             
             # Get feature importance as suggestions
             importance = learner.get_feature_importance()
@@ -503,9 +577,11 @@ class PaintFormulationApp:
                     sorted_features = sorted(features.items(), key=lambda x: x[1], reverse=True)[:2]
                     for feature, imp in sorted_features:
                         if imp > 0.15:
-                            suggestions.append(f"{feature} değeri {target} için yüksek etki gösteriyor (%{imp*100:.0f})")
+                            # Localized template
+                            msg = t(TK.ML_COMMENT_ABOVE).replace('{label}', feature).replace('{pct}', f"{imp*100:.0f}")
+                            suggestions.append(msg)
             
-            return suggestions[:5] if suggestions else ["Bu proje için henüz yeterli kalıp öğrenilmedi."]
+            return suggestions[:5] if suggestions else [t(TK.ML_EMPTY_RULES)]
         except Exception as e:
             logger.warning(f"Failed to get project suggestions: {e}")
             return []
@@ -698,8 +774,8 @@ class PaintFormulationApp:
             self.active_formulation_code = None
             
             # Göstergeyi güncelle
-            self.active_selection_label.config(text=f"📁 {project_name} ({len(formulations)} formül)")
-            self.status_bar.set_status(f"Proje seçildi: {project_name}")
+            self.active_selection_label.config(text=f"📁 {project_name} ({len(formulations)} {t(TK.FORM_SAVED_FORMULAS).lower()})")
+            self.status_bar.set_status(f"{t(TK.FORM_PROJECT)} {t(TK.common_success if hasattr(TK, 'common_success') else TK.SUCCESS)}: {project_name}")
     
     def _on_global_formula_change(self, event=None):
         """Global formül seçimi değiştiğinde"""
@@ -719,7 +795,7 @@ class PaintFormulationApp:
         
         # Göstergeyi güncelle
         self.active_selection_label.config(text=f"📁 {self.active_project_name} / 📋 {formula_code}")
-        self.status_bar.set_status(f"Formül seçildi: {formula_code}")
+        self.status_bar.set_status(f"{t(TK.FORM_SAVED_FORMULAS)} {t(TK.common_success if hasattr(TK, 'common_success') else TK.SUCCESS)}: {formula_code}")
         
         # Aktif sekmeye göre detayları yükle
         self._load_formulation_to_current_tab()
@@ -749,28 +825,34 @@ class PaintFormulationApp:
         """Dashboard kartına tıklandığında filtrelenmiş popup göster"""
         try:
             # Kart tipine göre formülasyonları getir
-            if card_label == "Toplam Formül":
+            # card_label is usually the TK key from DashboardPanel
+            total_keys = [TK.DASHBOARD_STATS_TOTAL, "Toplam Formül", "Total Formulas"]
+            monthly_keys = [TK.DASHBOARD_STATS_MONTHLY, "Bu Ay Eklenen", "Added This Month"]
+            waiting_keys = [TK.DASHBOARD_STATS_WAITING, "Test Bekleyen", "Waiting for Test"]
+            success_keys = [TK.DASHBOARD_STATS_SUCCESS, "Başarılı", "Successful"]
+            
+            if card_label in total_keys:
                 formulations = self.db_manager.get_all_formulations()
-                title = "📋 Tüm Formülasyonlar"
-            elif card_label == "Bu Ay Eklenen":
+                title = f"📋 {t(TK.DASHBOARD_TOTAL_FORMULAS)}"
+            elif card_label in monthly_keys:
                 formulations = self.db_manager.get_formulations_this_month()
-                title = "📅 Bu Ay Eklenen Formülasyonlar"
-            elif card_label == "Test Bekleyen":
+                title = f"📅 {t(TK.DASHBOARD_ADDED_THIS_MONTH)}"
+            elif card_label in waiting_keys:
                 formulations = self.db_manager.get_formulations_without_trials()
-                title = "⏳ Test Bekleyen Formülasyonlar"
-            elif card_label == "Başarılı":
+                title = f"⏳ {t(TK.DASHBOARD_WAITING_TEST)}"
+            elif card_label in success_keys:
                 # Başarılı için test sonuçlarını göster
                 trials = self.db_manager.get_recent_trials(100)
-                title = "✅ Tüm Test Sonuçları"
+                title = f"✅ {t(TK.DASHBOARD_SUCCESSFUL)}"
                 if trials:
                     TrialListDialog(self.root, title, trials)
                 else:
-                    messagebox.showinfo("Bilgi", f"{title}\n\nHenüz test sonucu bulunmuyor.")
-                self.status_bar.set_status(f"{card_label}: {len(trials)} test sonucu")
+                    messagebox.showinfo(t(TK.common_info if hasattr(TK, 'common_info') else TK.INFO), f"{title}\n\n{t(TK.MSG_NO_PREV_TEST)}")
+                self.status_bar.set_status(f"{card_label}: {len(trials)} test")
                 return
             else:
                 formulations = []
-                title = "Formülasyonlar"
+                title = t(TK.FORM_SAVED_FORMULAS)
             
             # Formülasyon popup aç
             if formulations:
@@ -793,13 +875,13 @@ class PaintFormulationApp:
         """Hızlı işlem butonlarına tıklandığında"""
         if action == "new_formulation":
             self.notebook.select(2)  # Formülasyon sekmesi
-            self.status_bar.set_status("Yeni formülasyon için hazır")
+            self.status_bar.set_status(t(TK.MSG_READY))
         elif action == "new_test":
             self.notebook.select(3)  # Test sonuçları sekmesi
-            self.status_bar.set_status("Test sonucu girişi için hazır")
+            self.status_bar.set_status(t(TK.MSG_READY))
         elif action == "ml_predict":
             self.notebook.select(4)  # Optimizasyon sekmesi
-            self.status_bar.set_status("ML tahmin için optimizasyon sekmesi açıldı")
+            self.status_bar.set_status(t(TK.ML_AI_ENGINE))
         elif action == "report":
             self._generate_report()
         elif action == "import":
@@ -846,11 +928,11 @@ class PaintFormulationApp:
         """Formülasyonu sil"""
         try:
             self.db_manager.delete_formulation(formulation_id)
-            self.status_bar.set_status(f"Formülasyon #{formulation_id} silindi")
+            self.status_bar.set_status(f"{t(TK.FORM_SAVED_FORMULAS)} #{formulation_id} {t(TK.common_delete if hasattr(TK, 'common_delete') else TK.DELETE)}")
             # Dashboard güncelle
             self._refresh_dashboard()
         except Exception as e:
-            messagebox.showerror("Hata", f"Silme hatası: {str(e)}")
+            messagebox.showerror(t(TK.common_error if hasattr(TK, 'common_error') else TK.ERROR), f"{t(TK.MSG_ERROR_SAVE)}: {str(e)}")
     
     def _refresh_dashboard(self):
         """Dashboard verilerini yenile"""
@@ -1615,9 +1697,9 @@ class PaintFormulationApp:
                     percentage=amount
                 )
             
-            messagebox.showinfo("Şaşılı", f"{len(recipe)} bileşen formülasyon editörüne aktarıldı.")
+            messagebox.showinfo(t(TK.common_success if hasattr(TK, 'common_success') else TK.SUCCESS), f"{len(recipe)} {t(TK.MAT_TITLE)} {t(TK.MSG_SAVE_SUCCESS if hasattr(TK, 'MSG_SAVE_SUCCESS') else TK.SUCCESS)}")
             
         except AttributeError as e:
             # Formülasyon editöründe gerekli metodlar yoksa
             logger.warning(f"Formülasyon editörü uyumsuz: {e}")
-            messagebox.showwarning("Uyarı", "Reçete otomatik aktarılamadı. Lütfen manuel olarak girin.")
+            messagebox.showwarning(t(TK.common_warning if hasattr(TK, 'common_warning') else TK.WARNING), t(TK.MSG_CHOOSE_FORMULATION))

@@ -2,7 +2,10 @@ import tkinter as tk
 from tkinter import ttk
 import logging
 
-class VariationComparisonPanel(ttk.Frame):
+from src.core.i18n import t, I18nMixin
+from src.core.translation_keys import TK
+
+class VariationComparisonPanel(ttk.Frame, I18nMixin):
     """
     Shows multiple variations (Trials) side-by-side for comparison.
     Rows: Metrics (Viscosity, Cost, etc.) + Ingredients
@@ -11,41 +14,57 @@ class VariationComparisonPanel(ttk.Frame):
     def __init__(self, parent, db_manager):
         super().__init__(parent, padding=10)
         self.db_manager = db_manager
+        self.current_concept_id = None
         
-        ttk.Label(self, text="📊 Varyasyon Karşılaştırma", font=("Segoe UI", 12, "bold")).pack(anchor=tk.W, pady=(0, 10))
+        self.setup_i18n()
+        
+        self.title_label = ttk.Label(self, font=("Segoe UI", 12, "bold"))
+        self.title_label.pack(anchor=tk.W, pady=(0, 10))
         
         self.tree_frame = ttk.Frame(self)
         self.tree_frame.pack(fill=tk.BOTH, expand=True)
         
         # Will be created dynamically based on number of variations
         self.tree = None 
+        
+        # Initial empty state
+        self.empty_label = ttk.Label(self.tree_frame, text=t(TK.TEST_MESSAGES_NO_TRIALS), justify=tk.CENTER)
+        self.empty_label.pack(expand=True, pady=50)
+        
+        self._update_texts()
+
+    def _update_texts(self):
+        """Update texts for i18n"""
+        self.title_label.config(text=t(TK.NAV_OPTIMIZATION)) # Use standard Comparison key
+        if self.current_concept_id:
+            self.load_concept(self.current_concept_id)
 
     def load_concept(self, concept_id: int):
-        """Load all trials for a concept and display comparison"""
-        # Clear previous
-        for widget in self.tree_frame.winfo_children():
-            widget.destroy()
-            
+        self.current_concept_id = concept_id
+        
         # 1. Fetch Data
-        # We need a new method in db_manager or reuse get_project_hierarchy logic
-        # For now, let's assume we can fetch trials for a concept
         trials = self._fetch_trials_for_concept(concept_id)
         
         if not trials:
-            ttk.Label(self.tree_frame, text="Bu konsept için henüz test kaydı yok.").pack()
+            # Keep empty state
             return
+        
+        # Remove empty label if trials exist
+        if hasattr(self, 'empty_label') and self.empty_label.winfo_exists():
+            self.empty_label.pack_forget()
 
         # 2. Build Treeview Columns
         columns = ["metric"] + [f"trial_{t['id']}" for t in trials]
         self.tree = ttk.Treeview(self.tree_frame, columns=columns, show="headings")
         
         # Headers
-        self.tree.heading("metric", text="Özellik / Bileşen")
+        self.tree.heading("metric", text=t(TK.TEST_COMPARE_PARAM))
         self.tree.column("metric", width=200, anchor=tk.W)
         
-        for t in trials:
-            col_id = f"trial_{t['id']}"
-            header_text = f"{t.get('trial_code', 'Trial')}\n({t.get('result', '-')})"
+        for trial in trials:
+            col_id = f"trial_{trial['id']}"
+            trial_label = t(TK.FORM_SAVED_FORMULAS) if trial.get('trial_code') == 'Trial' else trial.get('trial_code', 'Trial')
+            header_text = f"{trial_label}\n({trial.get('result', '-')})"
             self.tree.heading(col_id, text=header_text)
             self.tree.column(col_id, width=100, anchor=tk.CENTER)
             
@@ -54,16 +73,17 @@ class VariationComparisonPanel(ttk.Frame):
         # 3. Populate Rows
         # -- Physical Properties --
         metrics = [
-            ('Viskozite', 'viscosity'),
-            ('pH', 'ph'),
-            ('Boya Yoğunluğu', 'density'),
-            ('Örtücülük', 'opacity'),
-            ('Parlaklık', 'gloss'),
-            ('Maliyet', 'total_cost'),
-            ('Kalite Skoru', 'quality_score')
+            (t(TK.PARAM_VISCOSITY), 'viscosity'),
+            (t(TK.PARAM_PH), 'ph'),
+            (t(TK.PARAM_DENSITY), 'density'),
+            (t(TK.TEST_OPACITY), 'opacity'),
+            (t(TK.TEST_GLOSS60), 'gloss'),
+            (t(TK.FORM_TOTAL_COST), 'total_cost'),
+            (t(TK.DASHBOARD_STATS_SUCCESS), 'quality_score')
         ]
         
-        self.tree.insert("", "end", "header_props", text="Fiziksel Özellikler", values=["--- FİZİKSEL ÖZELLİKLER ---"] + [""]*len(trials), tags=('section',))
+        props_header = t(TK.TEST_PHYSICAL_PROPS)
+        self.tree.insert("", "end", "header_props", text=props_header, values=[props_header] + [""]*len(trials), tags=('section',))
         
         for label, key in metrics:
             values = [label]
@@ -78,7 +98,8 @@ class VariationComparisonPanel(ttk.Frame):
             self._highlight_differences(item_id, row_vals, columns)
 
         # -- Ingredients (Complex Mapping) --
-        self.tree.insert("", "end", "header_ing", text="Bileşenler", values=["--- BİLEŞENLER (kg) ---"] + [""]*len(trials), tags=('section',))
+        ing_header = t(TK.TEST_INGREDIENTS_HEADER)
+        self.tree.insert("", "end", "header_ing", text=ing_header, values=[ing_header] + [""]*len(trials), tags=('section',))
         
         # Get all unique ingredients across all trials
         all_ingredients = set()

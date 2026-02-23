@@ -104,7 +104,7 @@ class ProjectPanel(ttk.LabelFrame):
         index = selection[0]
         project_name = self.project_listbox.get(index)
         
-        if messagebox.askyesno("Onay", f"'{project_name}' projesini silmek istediğinizden emin misiniz?"):
+        if messagebox.askyesno(t(TK.common_confirm if hasattr(TK, 'common_confirm') else TK.CONFIRM), t(TK.MSG_DELETE_CONFIRM).replace('{item}', f"'{project_name}'")):
             # Callback ile veritabanından sil
             if self.on_project_change:
                 project_data = self._projects_data[index] if index < len(self._projects_data) else {'name': project_name}

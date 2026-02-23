@@ -1,14 +1,12 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
-import logging
-from typing import Callable, Optional
+from src.core.i18n import t, I18nMixin
+from src.core.translation_keys import TK
 
 # Constants for Treeview Items
 TYPE_PROJECT = "project"
 TYPE_CONCEPT = "concept"
 TYPE_TRIAL = "trial"
 
-class SidebarNavigator(ttk.Frame):
+class SidebarNavigator(ttk.Frame, I18nMixin):
     """
     Hierarchical Sidebar Navigation (Project > Concept > Variation)
     Mimics QTreeWidget behavior.
@@ -19,27 +17,28 @@ class SidebarNavigator(ttk.Frame):
         
         self.db_manager = db_manager
         self.on_selection_change = on_selection_change
+        self.setup_i18n()
         
         self._create_ui()
         self.refresh()
         
     def _create_ui(self):
         # Header
-        header = ttk.Frame(self, padding=5)
-        header.pack(fill=tk.X)
-        ttk.Label(header, text="🗂️ Proje Gezgini", font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT)
-        ttk.Button(header, text="🔄", width=3, command=self.refresh).pack(side=tk.RIGHT)
+        self.header_frame = ttk.Frame(self, padding=5)
+        self.header_frame.pack(fill=tk.X)
+        self.header_label = ttk.Label(self.header_frame, font=("Segoe UI", 10, "bold"))
+        self.header_label.pack(side=tk.LEFT)
+        ttk.Button(self.header_frame, text="🔄", width=3, command=self.refresh).pack(side=tk.RIGHT)
         
         # New Project Button
-        action_frame = ttk.Frame(self, padding=(5, 0, 5, 5))
-        action_frame.pack(fill=tk.X)
+        self.action_frame = ttk.Frame(self, padding=(5, 0, 5, 5))
+        self.action_frame.pack(fill=tk.X)
         
-        new_project_btn = ttk.Button(
-            action_frame, 
-            text="➕ Yeni Proje", 
+        self.new_project_btn = ttk.Button(
+            self.action_frame, 
             command=self._open_new_project_dialog
         )
-        new_project_btn.pack(fill=tk.X)
+        self.new_project_btn.pack(fill=tk.X)
         
         # Treeview
         self.tree = ttk.Treeview(self, show="tree", selectmode="browse")
@@ -54,19 +53,19 @@ class SidebarNavigator(ttk.Frame):
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
         self.tree.bind("<Button-3>", self._on_right_click) # Right click
         
-        # Tags for coloring/styling
-        self.tree.tag_configure("project", font=("Segoe UI", 9, "bold"))
-        self.tree.tag_configure("concept", font=("Segoe UI", 9))
-        self.tree.tag_configure("trial_success", foreground="#4CAF50") # Green
-        self.tree.tag_configure("trial_fail", foreground="#F44336")    # Red
-        self.tree.tag_configure("trial_draft", foreground="#FFC107")   # Orange
-    
+        self._update_texts()
+
+    def _update_texts(self):
+        """Update static UI texts"""
+        self.header_label.config(text=t(TK.NAV_PROJECT_EXPLORER))
+        self.new_project_btn.config(text=t(TK.NAV_NEW_PROJECT))
+
     def _open_new_project_dialog(self):
         """Open dialog to create a new project"""
         from tkinter import simpledialog
         name = simpledialog.askstring(
-            "Yeni Proje", 
-            "Proje Adı:",
+            t(TK.NAV_NEW_PROJECT), 
+            t(TK.FORM_NAME),
             parent=self
         )
         if name and name.strip():
@@ -79,9 +78,9 @@ class SidebarNavigator(ttk.Frame):
                 }
                 self.db_manager.create_project(project_data)
                 self.refresh()
-                messagebox.showinfo("Başarılı", f"'{name}' projesi oluşturuldu!")
+                messagebox.showinfo(t(TK.SUCCESS), t(TK.MSG_SAVE_SUCCESS))
             except Exception as e:
-                messagebox.showerror("Hata", f"Proje oluşturulamadı: {e}")
+                messagebox.showerror(t(TK.ERROR), f"{t(TK.MSG_DB_ERROR)}: {e}")
         
     def refresh(self):
         """Rebuilds the tree from DB"""

@@ -14,10 +14,11 @@ from tkinter import ttk
 from typing import Dict, List, Optional, Callable
 import logging
 
-logger = logging.getLogger(__name__)
+from src.core.i18n import t, I18nMixin
+from src.core.translation_keys import TK
 
 
-class PassiveMLPanel(ttk.Frame):
+class PassiveMLPanel(ttk.Frame, I18nMixin):
     """
     Passive Assistant ML Panel.
     
@@ -49,7 +50,9 @@ class PassiveMLPanel(ttk.Frame):
         self._learned_rules = []
         self._project_list = []
         
+        self.setup_i18n()
         self._create_ui()
+        self._update_texts()
         
         # Load projects from DB on init
         self._load_projects_from_db()
@@ -70,11 +73,11 @@ class PassiveMLPanel(ttk.Frame):
         header.pack(fill=tk.X, pady=(0, 15))
         
         # Title
-        ttk.Label(
+        self.title_label = ttk.Label(
             header,
-            text="🧠 Makine Öğrenmesi Merkezi",
             font=('Segoe UI', 16, 'bold')
-        ).pack(side=tk.LEFT)
+        )
+        self.title_label.pack(side=tk.LEFT)
         
         # AI Status Indicator (Right side)
         self.status_frame = ttk.Frame(header)
@@ -89,7 +92,6 @@ class PassiveMLPanel(ttk.Frame):
         
         self.status_label = ttk.Label(
             self.status_frame,
-            text="AI Engine: Hazır",
             font=('Segoe UI', 10)
         )
         self.status_label.pack(side=tk.LEFT)
@@ -102,20 +104,21 @@ class PassiveMLPanel(ttk.Frame):
         content.rowconfigure(0, weight=1)
         
         # === LEFT COLUMN: Project Coach ===
-        left_frame = ttk.LabelFrame(content, text="🎯 Proje Koçu", padding=15)
-        left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        self.left_frame = ttk.LabelFrame(content, padding=15)
+        self.left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
         
         # Project selector (minimal)
-        proj_row = ttk.Frame(left_frame)
+        proj_row = ttk.Frame(self.left_frame)
         proj_row.pack(fill=tk.X, pady=(0, 15))
         
-        ttk.Label(proj_row, text="Aktif Proje:", font=('Segoe UI', 9)).pack(side=tk.LEFT)
+        self.active_project_label = ttk.Label(proj_row, font=('Segoe UI', 9))
+        self.active_project_label.pack(side=tk.LEFT)
         self.project_combo = ttk.Combobox(proj_row, state='readonly', width=25)
         self.project_combo.pack(side=tk.LEFT, padx=10)
         self.project_combo.bind('<<ComboboxSelected>>', self._on_project_changed)
         
         # Suggestions container (scrollable)
-        suggestions_container = ttk.Frame(left_frame)
+        suggestions_container = ttk.Frame(self.left_frame)
         suggestions_container.pack(fill=tk.BOTH, expand=True)
         
         # Canvas for scrolling
@@ -149,22 +152,22 @@ class PassiveMLPanel(ttk.Frame):
         self._show_suggestions_empty_state()
         
         # === RIGHT COLUMN: Global Trends ===
-        right_frame = ttk.LabelFrame(content, text="📊 Global Trendler", padding=15)
-        right_frame.grid(row=0, column=1, sticky="nsew")
+        self.right_frame = ttk.LabelFrame(content, padding=15)
+        self.right_frame.grid(row=0, column=1, sticky="nsew")
         
         # Feature Importance Chart
-        chart_header = ttk.Frame(right_frame)
+        chart_header = ttk.Frame(self.right_frame)
         chart_header.pack(fill=tk.X, pady=(0, 10))
         
-        ttk.Label(
+        self.chart_title_label = ttk.Label(
             chart_header,
-            text="Özellik Önemi",
             font=('Segoe UI', 11, 'bold')
-        ).pack(side=tk.LEFT)
+        )
+        self.chart_title_label.pack(side=tk.LEFT)
         
         # Canvas for bar chart
         self.chart_canvas = tk.Canvas(
-            right_frame,
+            self.right_frame,
             height=200,
             bg='#2D2D2D',
             highlightthickness=1,
@@ -173,18 +176,18 @@ class PassiveMLPanel(ttk.Frame):
         self.chart_canvas.pack(fill=tk.X, pady=(0, 15))
         
         # Learned Rules Section
-        rules_header = ttk.Frame(right_frame)
-        rules_header.pack(fill=tk.X, pady=(0, 5))
+        rules_header = ttk.Frame(self.right_frame)
+        rules_header.pack(fill=tk.X, pady=(15, 5))
         
-        ttk.Label(
+        self.rules_title_label = ttk.Label(
             rules_header,
-            text="📚 Öğrenilen Kurallar",
             font=('Segoe UI', 11, 'bold')
-        ).pack(side=tk.LEFT)
+        )
+        self.rules_title_label.pack(side=tk.LEFT)
         
         # Rules text area
         self.rules_text = tk.Text(
-            right_frame,
+            self.right_frame,
             wrap=tk.WORD,
             state='disabled',
             bg='#1E1E1E',
@@ -201,6 +204,19 @@ class PassiveMLPanel(ttk.Frame):
         self._draw_empty_chart()
         self._show_rules_empty_state()
     
+    def _update_texts(self):
+        """Update texts for i18n"""
+        self.title_label.config(text=f"🧠 {t(TK.ML_CENTER_TITLE)}")
+        self.set_learning_status(self._is_learning)
+        self.left_frame.config(text=t(TK.ML_PROJECT_COACH))
+        self.active_project_label.config(text=t(TK.ML_ACTIVE_PROJECT))
+        self.right_frame.config(text=t(TK.ML_GLOBAL_TRENDS))
+        self.chart_title_label.config(text=t(TK.ML_FEATURE_IMPORTANCE))
+        self.rules_title_label.config(text=t(TK.ML_LEARNED_RULES))
+        
+        # Redraw charts and rules to update empty states or content
+        self._refresh_insights()
+
     def _on_mousewheel(self, event):
         """Handle mouse wheel scroll"""
         self.suggestions_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -318,11 +334,11 @@ class PassiveMLPanel(ttk.Frame):
         
         if is_learning:
             self.status_icon.config(text="🔄")
-            self.status_label.config(text="AI Engine: Öğreniyor...")
+            self.status_label.config(text=f"{t(TK.ML_AI_ENGINE)} {t(TK.ML_STATUS_LEARNING)}")
             self._animate_status()
         else:
             self.status_icon.config(text="🟢")
-            self.status_label.config(text="AI Engine: Güncel")
+            self.status_label.config(text=f"{t(TK.ML_AI_ENGINE)} {t(TK.ML_STATUS_READY)}")
     
     def _animate_status(self):
         """Animate status icon while learning"""
@@ -395,7 +411,7 @@ class PassiveMLPanel(ttk.Frame):
         
         ttk.Label(
             empty_card,
-            text="Proje verisi toplandıkça\nöneriler burada görünecek",
+            text=t(TK.ML_EMPTY_SUGGESTIONS),
             font=('Segoe UI', 10),
             foreground='gray',
             justify=tk.CENTER
@@ -416,11 +432,13 @@ class PassiveMLPanel(ttk.Frame):
     def _create_suggestion_card(self, suggestion: str, index: int):
         """Create a single suggestion card"""
         # Determine card type based on content
-        if 'uyarı' in suggestion.lower() or 'dikkat' in suggestion.lower():
+        s_low = suggestion.lower()
+        # Language-neutral detection
+        if any(w in s_low for w in ['uyarı', 'dikkat', 'warning', 'attention']):
             icon = "⚠️"
             bg_color = "#3D2F00"
             border_color = "#FFB300"
-        elif 'artır' in suggestion.lower() or 'iyi' in suggestion.lower():
+        elif any(w in s_low for w in ['artır', 'iyi', 'increase', 'improve', 'good', 'above']):
             icon = "📈"
             bg_color = "#1B3A2F"
             border_color = "#00B894"
@@ -473,7 +491,7 @@ class PassiveMLPanel(ttk.Frame):
         # Empty state message
         self.chart_canvas.create_text(
             width // 2, height // 2,
-            text="Model eğitildiğinde\nözellik önemi grafiği burada görünecek",
+            text=t(TK.ML_EMPTY_CHART),
             fill='#666666',
             font=('Segoe UI', 10),
             justify=tk.CENTER
@@ -557,15 +575,15 @@ class PassiveMLPanel(ttk.Frame):
     def _format_feature_name(self, name: str) -> str:
         """Format feature name for display"""
         translations = {
-            'viscosity': 'Viskozite',
-            'ph': 'pH',
-            'density': 'Yoğunluk',
-            'coating_thickness': 'Kaplama Kal.',
+            'viscosity': t(TK.PARAM_VISCOSITY),
+            'ph': t(TK.PARAM_PH),
+            'density': t(TK.PARAM_DENSITY),
+            'coating_thickness': t(TK.PARAM_COATING_THICKNESS),
             'binder_ratio': 'Binder %',
             'pigment_ratio': 'Pigment %',
             'solvent_ratio': 'Solvent %',
             'additive_ratio': 'Katkı %',
-            'total_solids': 'Katı Madde',
+            'total_solids': t(TK.MAT_SOLID_CONTENT),
             'pvc': 'PVC'
         }
         return translations.get(name, name[:15])
@@ -576,11 +594,7 @@ class PassiveMLPanel(ttk.Frame):
         """Show empty state for rules"""
         self.rules_text.config(state='normal')
         self.rules_text.delete(1.0, tk.END)
-        self.rules_text.insert(tk.END, 
-            "Henüz öğrenilen kural yok.\n\n"
-            "Daha fazla formülasyon ve test sonucu\n"
-            "eklendikçe AI kuralları öğrenecek."
-        )
+        self.rules_text.insert(tk.END, t(TK.ML_EMPTY_RULES))
         self.rules_text.config(state='disabled')
     
     def _generate_learned_rules(self):
@@ -593,10 +607,10 @@ class PassiveMLPanel(ttk.Frame):
         
         # Analyze each target
         target_names = {
-            'quality_score': 'Kalite Skoru',
-            'opacity': 'Örtücülük',
-            'gloss': 'Parlaklık',
-            'corrosion_resistance': 'Korozyon Direnci'
+            'quality_score': t(TK.PARAMS_QUALITY_SCORE if hasattr(TK, 'PARAMS_QUALITY_SCORE') else TK.PARAM_SUCCESS),
+            'opacity': t(TK.TEST_OPACITY),
+            'gloss': t(TK.PARAM_GLOSS),
+            'corrosion_resistance': t(TK.PARAM_CORROSION_RESISTANCE)
         }
         
         for target, importance_dict in self._feature_importance.items():
@@ -615,7 +629,12 @@ class PassiveMLPanel(ttk.Frame):
             for feature, importance in sorted_features:
                 if importance > 0.1:
                     feature_tr = self._format_feature_name(feature)
-                    rules.append(f"• {feature_tr} → {target_tr}'yi etkiler (%{importance*100:.0f})")
+                    # Use a template if we had one, but for now we'll just format it
+                    # In a real app, this should be a localized template string
+                    if get_i18n().current_language == 'en':
+                        rules.append(f"• {feature_tr} → affects {target_tr} ({importance*100:.0f}%)")
+                    else:
+                        rules.append(f"• {feature_tr} → {target_tr}'yi etkiler (%{importance*100:.0f})")
         
         self._learned_rules = rules
         self._display_learned_rules()
@@ -629,7 +648,7 @@ class PassiveMLPanel(ttk.Frame):
             self._show_rules_empty_state()
             return
         
-        self.rules_text.insert(tk.END, "Tüm projelerden öğrenilen kalıplar:\n\n")
+        self.rules_text.insert(tk.END, f"{t(TK.ML_RULES_PATTERN)}\n\n")
         
         for rule in self._learned_rules[:10]:
             self.rules_text.insert(tk.END, f"{rule}\n")

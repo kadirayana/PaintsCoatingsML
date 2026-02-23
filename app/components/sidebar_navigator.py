@@ -3,6 +3,9 @@ from tkinter import ttk, messagebox
 import logging
 from typing import Callable, Optional, TYPE_CHECKING
 
+from src.core.i18n import t, I18nMixin
+from src.core.translation_keys import TK
+
 if TYPE_CHECKING:
     from src.core.project_context import ProjectContext
 
@@ -11,7 +14,7 @@ TYPE_PROJECT = "project"
 TYPE_CONCEPT = "concept"
 TYPE_TRIAL = "trial"
 
-class SidebarNavigator(ttk.Frame):
+class SidebarNavigator(ttk.Frame, I18nMixin):
     """
     Hierarchical Sidebar Navigation (Project > Concept > Variation)
     Mimics QTreeWidget behavior.
@@ -31,26 +34,33 @@ class SidebarNavigator(ttk.Frame):
         self.on_project_change = on_project_change  # Callback for project changes
         self.context = context  # ProjectContext for unified state management
         
+        self.setup_i18n()
         self._create_ui()
+        self._update_texts()
         self.refresh()
         
+    def _update_texts(self):
+        """Update texts for i18n"""
+        self.title_label.config(text=t(TK.NAV_PROJECT_EXPLORER))
+        self.new_project_btn.config(text=t(TK.NAV_NEW_PROJECT))
+
     def _create_ui(self):
         # Header
         header = ttk.Frame(self, padding=5)
         header.pack(fill=tk.X)
-        ttk.Label(header, text="🗂️ Proje Gezgini", font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT)
+        self.title_label = ttk.Label(header, font=("Segoe UI", 10, "bold"))
+        self.title_label.pack(side=tk.LEFT)
         ttk.Button(header, text="🔄", width=3, command=self.refresh).pack(side=tk.RIGHT)
         
         # New Project Button
         action_frame = ttk.Frame(self, padding=(5, 0, 5, 5))
         action_frame.pack(fill=tk.X)
         
-        new_project_btn = ttk.Button(
+        self.new_project_btn = ttk.Button(
             action_frame, 
-            text="➕ Yeni Proje", 
             command=self._open_new_project_dialog
         )
-        new_project_btn.pack(fill=tk.X)
+        self.new_project_btn.pack(fill=tk.X)
         
         # Treeview
         self.tree = ttk.Treeview(self, show="tree", selectmode="browse")
@@ -76,8 +86,8 @@ class SidebarNavigator(ttk.Frame):
         """Open dialog to create a new project"""
         from tkinter import simpledialog
         name = simpledialog.askstring(
-            "Yeni Proje", 
-            "Proje Adı:",
+            t(TK.NAV_NEW_PROJECT), 
+            f"{t(TK.FORM_PROJECT)} {t(TK.FORM_NAME)}:",
             parent=self
         )
         if name and name.strip():
@@ -95,9 +105,9 @@ class SidebarNavigator(ttk.Frame):
                 if self.on_project_change:
                     self.on_project_change()
                 
-                messagebox.showinfo("Başarılı", f"'{name}' projesi oluşturuldu!")
+                messagebox.showinfo(t(TK.common_success if hasattr(TK, 'common_success') else TK.SUCCESS), t(TK.MSG_PROJECT_CREATED).replace('{name}', name))
             except Exception as e:
-                messagebox.showerror("Hata", f"Proje oluşturulamadı: {e}")
+                messagebox.showerror(t(TK.common_error if hasattr(TK, 'common_error') else TK.ERROR), f"{t(TK.ERROR)}: {e}")
         
     def refresh(self):
         """Rebuilds the tree from DB"""
@@ -193,21 +203,21 @@ class SidebarNavigator(ttk.Frame):
         menu = tk.Menu(self, tearoff=0)
         
         if item_type == TYPE_PROJECT:
-            menu.add_command(label="➕ Yeni Konsept", command=lambda: self._add_concept(db_id))
+            menu.add_command(label=f"➕ {t(TK.FORM_NEW_VARIATION)}", command=lambda: self._add_concept(db_id))
             menu.add_separator()
-            menu.add_command(label="🗑️ Projeyi Sil", command=lambda: self._delete_item(item_type, db_id))
+            menu.add_command(label=f"🗑️ {t(TK.common_delete if hasattr(TK, 'common_delete') else TK.DELETE)}", command=lambda: self._delete_item(item_type, db_id))
             
         elif item_type == TYPE_CONCEPT:
-            menu.add_command(label="➕ Yeni Deneme (Varyasyon)", command=lambda: self._add_trial(db_id))
+            menu.add_command(label=f"➕ {t(TK.FORM_NEW_VARIATION)}", command=lambda: self._add_trial(db_id))
             
         elif item_type == TYPE_TRIAL:
-            menu.add_command(label="✏️ Düzenle", command=lambda: self.on_selection_change(TYPE_TRIAL, db_id))
+            menu.add_command(label=f"✏️ {t(TK.common_edit if hasattr(TK, 'common_edit') else TK.EDIT)}", command=lambda: self.on_selection_change(TYPE_TRIAL, db_id))
             
         menu.post(event.x_root, event.y_root)
         
     def _add_concept(self, project_id):
         from tkinter import simpledialog
-        name = simpledialog.askstring("Yeni Konsept", "Konsept Adı (örn: High Gloss Topcoat):")
+        name = simpledialog.askstring(t(TK.FORM_NEW_VARIATION), f"{t(TK.NAV_OPTIMIZATION)} {t(TK.FORM_NAME)}:")
         if name:
             self.db_manager.create_parent_formulation(project_id, name)
             self.refresh()
@@ -222,7 +232,7 @@ class SidebarNavigator(ttk.Frame):
         
     def _delete_item(self, item_type, item_id):
         if item_type == TYPE_PROJECT:
-            if messagebox.askyesno("Onay", "Proje ve tüm içeriği silinsin mi?"):
+            if messagebox.askyesno(t(TK.common_confirm if hasattr(TK, 'common_confirm') else TK.CONFIRM), t(TK.MSG_ARE_YOU_SURE)):
                  # Assuming delete by ID exists or we fetch name
                  # self.db_manager.delete_project... (Needs update in Manager)
                  pass

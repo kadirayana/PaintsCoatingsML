@@ -198,7 +198,7 @@ class FormulationListDialog(tk.Toplevel):
             messagebox.showwarning("Uyarı", "Lütfen bir formülasyon seçin.")
             return
         
-        if messagebox.askyesno("Onay", "Bu formülasyonu silmek istediğinizden emin misiniz?"):
+        if messagebox.askyesno(t(TK.common_confirm if hasattr(TK, 'common_confirm') else TK.CONFIRM), t(TK.MSG_ARE_YOU_SURE)):
             if self.on_delete:
                 self.on_delete(formulation_id)
             

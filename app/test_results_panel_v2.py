@@ -8,13 +8,15 @@ Karar destek odaklı test sonuçları ekranı:
 - Geçmiş karşılaştırma
 """
 
+import os
+from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, messagebox
-from typing import Callable, Dict, List, Optional, Any
-import threading
-from datetime import datetime
-import json
-import os
+import logging
+from typing import Dict, List, Optional, Callable, Any
+
+from src.core.i18n import t, I18nMixin
+from src.core.translation_keys import TK
 
 # Theme colors
 try:
@@ -70,65 +72,66 @@ TEST_THRESHOLDS = {
     'pot_life': {'good': 60, 'medium': 30, 'unit': 'dk', 'higher_is_better': True},
 }
 
-# Test categories
+# Test categories - Dynamic Keys
 TEST_CATEGORIES = {
     'mechanical': {
-        'name': 'Mekanik Testler',
+        'name_key': TK.TEST_MECH,
         'icon': '🔧',
         'tests': ['hardness_konig', 'hardness_pencil', 'flexibility_erichsen', 'impact_resistance', 'adhesion'],
         'labels': {
-            'hardness_konig': 'Sertlik (König)',
-            'hardness_pencil': 'Sertlik (Kalem)',
-            'flexibility_erichsen': 'Esneklik (Erichsen)',
-            'impact_resistance': 'Çarpma Dayanımı',
-            'adhesion': 'Yapışma (Cross-cut)',
+            'hardness_konig': TK.TEST_HARDNESS_KONIG,
+            'hardness_pencil': TK.TEST_HARDNESS_PENCIL,
+            'flexibility_erichsen': TK.TEST_FLEXIBILITY,
+            'impact_resistance': TK.TEST_IMPACT,
+            'adhesion': TK.TEST_ADHESION,
         }
     },
     'optical': {
-        'name': 'Optik Testler',
+        'name_key': TK.TEST_OPTICAL,
         'icon': '✨',
         'tests': ['gloss_60', 'gloss_20', 'opacity', 'color_delta_e'],
         'labels': {
-            'gloss_60': 'Parlaklık (60°)',
-            'gloss_20': 'Parlaklık (20°)',
-            'opacity': 'Örtücülük',
-            'color_delta_e': 'Renk Farkı (ΔE)',
+            'gloss_60': TK.TEST_GLOSS60,
+            'gloss_20': TK.TEST_GLOSS20,
+            'opacity': TK.TEST_OPACITY,
+            'color_delta_e': TK.TEST_DE,
         }
     },
     'chemical': {
-        'name': 'Kimyasal Testler',
+        'name_key': TK.TEST_CHEMICAL,
         'icon': '🧪',
         'tests': ['acid_resistance', 'alkali_resistance', 'solvent_resistance', 'chemical_resistance'],
         'labels': {
-            'acid_resistance': 'Asit Dayanımı',
-            'alkali_resistance': 'Alkali Dayanımı',
-            'solvent_resistance': 'Solvent Dayanımı (DRC)',
-            'chemical_resistance': 'Kimyasal Dayanım',
+            'acid_resistance': TK.TEST_ACID,
+            'alkali_resistance': TK.TEST_ALKALI,
+            'solvent_resistance': TK.TEST_SOLVENT,
+            'chemical_resistance': TK.TEST_CHEMICAL_RES,
         }
     },
     'durability': {
-        'name': 'Dayanım Testleri',
+        'name_key': TK.TEST_DURABILITY,
         'icon': '🛡️',
         'tests': ['corrosion_resistance', 'uv_resistance', 'water_resistance', 'humidity_resistance'],
         'labels': {
-            'corrosion_resistance': 'Korozyon (Tuz Sisi)',
-            'uv_resistance': 'UV Dayanımı',
-            'water_resistance': 'Su Dayanımı',
-            'humidity_resistance': 'Nem Dayanımı',
+            'corrosion_resistance': TK.TEST_CORROSION,
+            'uv_resistance': TK.TEST_UV,
+            'water_resistance': TK.TEST_WATER,
+            'humidity_resistance': TK.TEST_HUMIDITY,
         }
     },
 }
 
 
-class StatusCard(tk.Frame):
+class StatusCard(tk.Frame, I18nMixin):
     """
     Renkli durum kartı - özet skor gösterimi
     """
     
-    def __init__(self, parent, category_key: str, title: str, icon: str = '', **kwargs):
+    def __init__(self, parent, category_key: str, title_key: str, icon: str = '', **kwargs):
         super().__init__(parent, **kwargs)
         
         self.category_key = category_key
+        self.title_key = title_key
         self._score = 0
         self._status = 'neutral'
         
@@ -139,7 +142,11 @@ class StatusCard(tk.Frame):
             padx=10,
             pady=8
         )
-        
+        self.setup_i18n()
+        self._create_widgets(icon)
+        self._update_texts()
+
+    def _create_widgets(self, icon):
         # Icon + Title
         title_frame = tk.Frame(self, bg=COLORS['bg_secondary'])
         title_frame.pack(fill=tk.X)
@@ -155,32 +162,30 @@ class StatusCard(tk.Frame):
         
         self.title_label = tk.Label(
             title_frame,
-            text=title,
-            font=('Segoe UI', 9),
-            bg=COLORS['bg_secondary'],
-            fg=COLORS['text_secondary']
-        )
-        self.title_label.pack(side=tk.LEFT, padx=5)
-        
-        # Status
-        self.status_label = tk.Label(
-            self,
-            text='—',
-            font=('Segoe UI', 11, 'bold'),
+            font=FONTS['heading'],
             bg=COLORS['bg_secondary'],
             fg=COLORS['text_primary']
         )
-        self.status_label.pack(pady=2)
+        self.title_label.pack(side=tk.LEFT, padx=5)
         
         # Score
         self.score_label = tk.Label(
             self,
-            text='—/100',
+            text='0',
+            font=('Segoe UI', 24, 'bold'),
+            bg=COLORS['bg_secondary'],
+            fg=COLORS['text_secondary']
+        )
+        self.score_label.pack(pady=5)
+        
+        # Status
+        self.status_label = tk.Label(
+            self,
             font=('Segoe UI', 9),
             bg=COLORS['bg_secondary'],
             fg=COLORS['text_secondary']
         )
-        self.score_label.pack()
+        self.status_label.pack()
         
         # Click to expand
         self.bind('<Button-1>', self._on_click)
@@ -193,10 +198,10 @@ class StatusCard(tk.Frame):
         self._score = score
         
         status_config = {
-            'good': {'text': 'İYİ', 'color': '#10B981', 'border': '#059669'},
-            'medium': {'text': 'ORTA', 'color': '#F59E0B', 'border': '#D97706'},
-            'bad': {'text': 'ZAYIF', 'color': '#EF4444', 'border': '#DC2626'},
-            'neutral': {'text': '—', 'color': COLORS['text_muted'], 'border': COLORS['border_default']},
+            'good': {'text': t(TK.TEST_STATUS_GOOD), 'color': '#10B981', 'border': '#059669'},
+            'medium': {'text': t(TK.TEST_STATUS_MEDIUM), 'color': '#F59E0B', 'border': '#D97706'},
+            'bad': {'text': t(TK.TEST_STATUS_BAD), 'color': '#EF4444', 'border': '#DC2626'},
+            'neutral': {'text': '—', 'color': COLORS['text_secondary'], 'border': COLORS['border_default']},
         }
         
         config = status_config.get(status, status_config['neutral'])
@@ -205,27 +210,37 @@ class StatusCard(tk.Frame):
         self.score_label.configure(text=f'{int(score)}/100' if score > 0 else '—/100')
         self.configure(highlightbackground=config['border'])
     
+    def _update_texts(self):
+        """Update texts on language change"""
+        self.title_label.config(text=t(self.title_key))
+        self.set_status(self._status, self._score)
+    
     def _on_click(self, event=None):
         """Emit click event for parent to handle"""
         self.event_generate('<<StatusCardClick>>')
 
 
-class CollapsibleTestGroup(ttk.Frame):
+class CollapsibleTestGroup(ttk.Frame, I18nMixin):
     """
     Açılır/kapanır test grubu paneli
     """
     
-    def __init__(self, parent, category_key: str, title: str, icon: str,
-                 tests: List[str], labels: Dict[str, str], on_value_change: Callable = None):
+    def __init__(self, parent, category_key: str, title_key: str, icon: str,
+                 tests: List[str], label_keys: Dict[str, str], on_value_change: Callable = None):
         super().__init__(parent)
         
         self.category_key = category_key
+        self.title_key = title_key
+        self.icon = icon
         self.tests = tests
-        self.labels = labels
+        self.label_keys = label_keys
         self.on_value_change = on_value_change
         self.entries: Dict[str, ttk.Entry] = {}
         self.status_labels: Dict[str, tk.Label] = {}
+        self.test_labels_widgets: Dict[str, tk.Label] = {}
         self._is_expanded = False
+        
+        self.setup_i18n()
         
         # Header (toggle button)
         self.header = tk.Frame(self, bg=COLORS['bg_secondary'], cursor='hand2')
@@ -243,7 +258,7 @@ class CollapsibleTestGroup(ttk.Frame):
         
         self.header_label = tk.Label(
             self.header,
-            text=f'{icon} {title}',
+            text=f'{self.icon} {t(self.title_key)}',
             font=FONTS.get('heading', ('Segoe UI', 12, 'bold')),
             bg=COLORS['bg_secondary'],
             fg=COLORS['text_primary']
@@ -278,13 +293,13 @@ class CollapsibleTestGroup(ttk.Frame):
             row.pack(fill=tk.X, padx=20, pady=3)
             
             # Label
-            label_text = self.labels.get(test_key, test_key)
+            label_text = t(self.label_keys.get(test_key, test_key))
             threshold = TEST_THRESHOLDS.get(test_key, {})
             unit = threshold.get('unit', '')
             
             label = tk.Label(
                 row,
-                text=f'{label_text}:',
+                text=f'{label_text} ({unit}):' if unit else f'{label_text}:',
                 font=FONTS.get('default', ('Segoe UI', 10)),
                 bg=COLORS['bg_panel'],
                 fg=COLORS['text_primary'],
@@ -292,9 +307,10 @@ class CollapsibleTestGroup(ttk.Frame):
                 anchor='w'
             )
             label.pack(side=tk.LEFT)
+            self.test_labels_widgets[test_key] = label
             
             # Entry
-            entry = ttk.Entry(row, width=12)
+            entry = ttk.Entry(row, width=10)
             entry.pack(side=tk.LEFT, padx=5)
             entry.bind('<FocusOut>', lambda e, k=test_key: self._on_entry_change(k))
             entry.bind('<Return>', lambda e, k=test_key: self._on_entry_change(k))
@@ -335,6 +351,18 @@ class CollapsibleTestGroup(ttk.Frame):
             )
             help_btn.pack(side=tk.LEFT)
             help_btn.bind('<Enter>', lambda e, k=test_key: self._show_tooltip(e, k))
+    
+    def _update_texts(self):
+        """Update texts on language change"""
+        self.header_label.config(text=f'{self.icon} {t(self.title_key)}')
+        for test_key, label in self.test_labels_widgets.items():
+            threshold = TEST_THRESHOLDS.get(test_key, {})
+            unit = threshold.get('unit', '')
+            label_text = t(self.label_keys.get(test_key, test_key))
+            label.config(text=f'{label_text} ({unit}):' if unit else f'{label_text}:')
+            
+            val = self.entries[test_key].get().strip()
+            self._update_status_badge(test_key, val)
     
     def _toggle(self, event=None):
         """Toggle expand/collapse"""
@@ -385,18 +413,18 @@ class CollapsibleTestGroup(ttk.Frame):
         
         if higher_is_better:
             if num_value >= good:
-                badge.configure(text='İYİ', fg='#10B981')
+                badge.configure(text=t(TK.TEST_STATUS_GOOD), fg='#10B981')
             elif num_value >= medium:
-                badge.configure(text='ORTA', fg='#F59E0B')
+                badge.configure(text=t(TK.TEST_STATUS_MEDIUM), fg='#F59E0B')
             else:
-                badge.configure(text='ZAYIF', fg='#EF4444')
+                badge.configure(text=t(TK.TEST_STATUS_BAD), fg='#EF4444')
         else:
             if num_value <= good:
-                badge.configure(text='İYİ', fg='#10B981')
+                badge.configure(text=t(TK.TEST_STATUS_GOOD), fg='#10B981')
             elif num_value <= medium:
-                badge.configure(text='ORTA', fg='#F59E0B')
+                badge.configure(text=t(TK.TEST_STATUS_MEDIUM), fg='#F59E0B')
             else:
-                badge.configure(text='ZAYIF', fg='#EF4444')
+                badge.configure(text=t(TK.TEST_STATUS_BAD), fg='#EF4444')
     
     def _show_tooltip(self, event, test_key: str):
         """Show help tooltip"""
@@ -490,7 +518,7 @@ class CollapsibleTestGroup(ttk.Frame):
         return status, avg_score
 
 
-class MLIntegrationPanel(tk.Frame):
+class MLIntegrationPanel(tk.Frame, I18nMixin):
     """
     ML entegrasyon paneli - model durumu, yorumlar, karşılaştırma
     """
@@ -499,24 +527,23 @@ class MLIntegrationPanel(tk.Frame):
         super().__init__(parent, **kwargs)
         
         self.configure(bg=COLORS['bg_panel'])
+        self.setup_i18n()
         
         # Model Status Section
-        status_frame = tk.LabelFrame(
+        self.status_frame = tk.LabelFrame(
             self,
-            text='📊 Model Durumu',
             font=FONTS.get('heading', ('Segoe UI', 11, 'bold')),
             bg=COLORS['bg_panel'],
             fg=COLORS['text_primary'],
             padx=10,
             pady=5
         )
-        status_frame.pack(fill=tk.X, pady=5)
+        self.status_frame.pack(fill=tk.X, pady=5)
         
         # Include in ML checkbox
         self.include_in_ml_var = tk.BooleanVar(value=True)
         self.include_check = tk.Checkbutton(
-            status_frame,
-            text='Bu test ML veri setine dahil edilsin',
+            self.status_frame,
             variable=self.include_in_ml_var,
             bg=COLORS['bg_panel'],
             fg=COLORS['text_primary'],
@@ -526,16 +553,16 @@ class MLIntegrationPanel(tk.Frame):
         self.include_check.pack(anchor='w')
         
         # Confidence score
-        conf_frame = tk.Frame(status_frame, bg=COLORS['bg_panel'])
+        conf_frame = tk.Frame(self.status_frame, bg=COLORS['bg_panel'])
         conf_frame.pack(fill=tk.X, pady=5)
         
-        tk.Label(
+        self.confidence_header = tk.Label(
             conf_frame,
-            text='Güven Skoru:',
             font=('Segoe UI', 9),
             bg=COLORS['bg_panel'],
             fg=COLORS['text_secondary']
-        ).pack(side=tk.LEFT)
+        )
+        self.confidence_header.pack(side=tk.LEFT)
         
         self.confidence_bar = ttk.Progressbar(
             conf_frame,
@@ -556,8 +583,7 @@ class MLIntegrationPanel(tk.Frame):
         
         # Last training info
         self.training_label = tk.Label(
-            status_frame,
-            text='Son Eğitim: —',
+            self.status_frame,
             font=('Segoe UI', 9),
             bg=COLORS['bg_panel'],
             fg=COLORS['text_secondary']
@@ -565,19 +591,18 @@ class MLIntegrationPanel(tk.Frame):
         self.training_label.pack(anchor='w')
         
         # ML Comments Section
-        comments_frame = tk.LabelFrame(
+        self.comments_frame = tk.LabelFrame(
             self,
-            text='💡 Model Yorumları',
             font=FONTS.get('heading', ('Segoe UI', 11, 'bold')),
             bg=COLORS['bg_panel'],
             fg=COLORS['text_primary'],
             padx=10,
             pady=5
         )
-        comments_frame.pack(fill=tk.X, pady=5)
+        self.comments_frame.pack(fill=tk.X, pady=5)
         
         self.comments_text = tk.Text(
-            comments_frame,
+            self.comments_frame,
             height=5,
             bg=COLORS['bg_input'],
             fg=COLORS['text_primary'],
@@ -589,38 +614,33 @@ class MLIntegrationPanel(tk.Frame):
         self.comments_text.pack(fill=tk.X)
         
         # Comparison Section
-        compare_frame = tk.LabelFrame(
+        self.compare_frame = tk.LabelFrame(
             self,
-            text='📈 Hızlı Karşılaştırma',
             font=FONTS.get('heading', ('Segoe UI', 11, 'bold')),
             bg=COLORS['bg_panel'],
             fg=COLORS['text_primary'],
             padx=10,
             pady=5
         )
-        compare_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        self.compare_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         
         # Comparison selector
         self.compare_combo = ttk.Combobox(
-            compare_frame,
-            values=['Son 3 test ile kıyasla', 'Önceki versiyon ile kıyasla', 'Proje ortalaması ile kıyasla'],
+            self.compare_frame,
             state='readonly',
             width=25
         )
         self.compare_combo.pack(fill=tk.X, pady=5)
-        self.compare_combo.current(0)
+        # updated in _update_texts
         
         # Comparison results treeview
         self.compare_tree = ttk.Treeview(
-            compare_frame,
+            self.compare_frame,
             columns=('param', 'current', 'previous', 'delta'),
             show='headings',
             height=5
         )
-        self.compare_tree.heading('param', text='Parametre')
-        self.compare_tree.heading('current', text='Şimdi')
-        self.compare_tree.heading('previous', text='Önceki')
-        self.compare_tree.heading('delta', text='Δ')
+        # Headings updated in _update_texts
         
         self.compare_tree.column('param', width=100)
         self.compare_tree.column('current', width=60)
@@ -628,7 +648,31 @@ class MLIntegrationPanel(tk.Frame):
         self.compare_tree.column('delta', width=60)
         
         self.compare_tree.pack(fill=tk.BOTH, expand=True)
+        self._update_texts()
     
+    def _update_texts(self):
+        """Update texts on language change"""
+        self.status_frame.config(text=t(TK.NAV_ML_CENTER))
+        self.include_check.config(text=t(TK.TEST_MESSAGES_ML_INCLUDE))
+        self.confidence_header.config(text=t(TK.TEST_MESSAGES_CONFIDENCE))
+        self.comments_frame.config(text=t(TK.TEST_MESSAGES_COMMENTS))
+        self.compare_frame.config(text=t(TK.TEST_MESSAGES_COMPARE))
+        
+        self.compare_combo.config(values=[
+            t(TK.TEST_MESSAGES_COMPARE) + " (Last 3)", 
+            t(TK.TEST_MESSAGES_COMPARE) + " (Prev)", 
+            t(TK.TEST_MESSAGES_COMPARE) + " (Avg)"
+        ])
+        
+        self.compare_tree.heading('param', text=t(TK.TEST_COMPARE_PARAM))
+        self.compare_tree.heading('current', text=t(TK.TEST_COMPARE_NOW))
+        self.compare_tree.heading('previous', text=t(TK.TEST_COMPARE_PREV))
+        self.compare_tree.heading('delta', text=t(TK.TEST_COMPARE_DELTA))
+        
+        # Refresh training info if already set
+        if hasattr(self, '_last_training_data'):
+            self.set_training_info(*self._last_training_data)
+
     def set_confidence(self, score: float):
         """Set confidence score (0-100)"""
         self.confidence_bar['value'] = score
@@ -636,7 +680,9 @@ class MLIntegrationPanel(tk.Frame):
     
     def set_training_info(self, last_trained: str, sample_count: int):
         """Set last training info"""
-        self.training_label.configure(text=f'Son Eğitim: {last_trained} ({sample_count} örnek)')
+        self._last_training_data = (last_trained, sample_count)
+        label_text = f"{t(TK.TEST_MESSAGES_LAST_TRAINING)} {last_trained} ({sample_count} {t(TK.common_all).lower()})"
+        self.training_label.configure(text=label_text)
     
     def set_comments(self, comments: List[str]):
         """Set ML comments"""
@@ -671,26 +717,24 @@ class MLIntegrationPanel(tk.Frame):
         self.compare_tree.tag_configure('negative', foreground='#EF4444')
 
 
-class TestResultsPanelV2(ttk.Frame):
+class TestResultsPanelV2(ttk.Frame, I18nMixin):
     """
     Test Sonuçları Paneli V2 - Karar Destek Odaklı
-    
-    Özellikler:
-    - Renkli özet durum kartları
-    - Gruplandırılmış açılır/kapanır test panelleri
-    - ML entegrasyonu ve yorumlar
-    - Geçmiş karşılaştırma
     """
     
     def __init__(self, parent, on_save: Callable = None, on_load_formulations: Callable = None,
                  on_load_trial: Callable = None, db_manager=None):
         super().__init__(parent)
-        
         self.on_save = on_save
         self.on_load_formulations = on_load_formulations
         self.on_load_trial = on_load_trial
         self.db = db_manager
         
+        self.current_formulation_code = None
+        self.current_trial_id = None
+        self.ml_panel = None
+        
+        self.setup_i18n()
         self.test_groups: Dict[str, CollapsibleTestGroup] = {}
         self.status_cards: Dict[str, StatusCard] = {}
         
@@ -710,35 +754,35 @@ class TestResultsPanelV2(ttk.Frame):
         top_bar = tk.Frame(self, bg=COLORS['bg_panel'])
         top_bar.grid(row=0, column=0, columnspan=2, sticky='ew', padx=10, pady=10)
         
-        tk.Label(
+        self.main_title = tk.Label(
             top_bar,
-            text='🧪 Test Sonuçları',
             font=('Segoe UI', 14, 'bold'),
             bg=COLORS['bg_panel'],
             fg=COLORS['text_primary']
-        ).pack(side=tk.LEFT)
+        )
+        self.main_title.pack(side=tk.LEFT)
         
         # Formulation selector (right side)
         selector_frame = tk.Frame(top_bar, bg=COLORS['bg_panel'])
         selector_frame.pack(side=tk.RIGHT)
         
-        tk.Label(
+        self.label_formulation = tk.Label(
             selector_frame,
-            text='Formülasyon:',
             bg=COLORS['bg_panel'],
             fg=COLORS['text_secondary']
-        ).pack(side=tk.LEFT, padx=5)
+        )
+        self.label_formulation.pack(side=tk.LEFT, padx=5)
         
         self.formulation_combo = ttk.Combobox(selector_frame, width=25, state='readonly')
         self.formulation_combo.pack(side=tk.LEFT, padx=5)
         self.formulation_combo.bind('<<ComboboxSelected>>', self._on_formulation_selected)
         
-        tk.Label(
+        self.label_date = tk.Label(
             selector_frame,
-            text='Tarih:',
             bg=COLORS['bg_panel'],
             fg=COLORS['text_secondary']
-        ).pack(side=tk.LEFT, padx=(20, 5))
+        )
+        self.label_date.pack(side=tk.LEFT, padx=(20, 5))
         
         self.date_entry = ttk.Entry(selector_frame, width=12)
         self.date_entry.pack(side=tk.LEFT)
@@ -751,13 +795,13 @@ class TestResultsPanelV2(ttk.Frame):
         cards_frame.grid(row=1, column=0, columnspan=2, sticky='ew', padx=10, pady=5)
         
         # Overall card
-        overall_card = StatusCard(cards_frame, 'overall', 'GENEL', '📊')
+        overall_card = StatusCard(cards_frame, 'overall', TK.TEST_OVERALL, '📊')
         overall_card.pack(side=tk.LEFT, padx=5)
         self.status_cards['overall'] = overall_card
         
         # Category cards
         for cat_key, cat_info in TEST_CATEGORIES.items():
-            card = StatusCard(cards_frame, cat_key, cat_info['name'].replace(' Testler', '').upper(), cat_info['icon'])
+            card = StatusCard(cards_frame, cat_key, cat_info['name_key'], cat_info['icon'])
             card.pack(side=tk.LEFT, padx=5)
             card.bind('<<StatusCardClick>>', lambda e, k=cat_key: self._expand_category(k))
             self.status_cards[cat_key] = card
@@ -785,7 +829,7 @@ class TestResultsPanelV2(ttk.Frame):
             group = CollapsibleTestGroup(
                 self.scroll_frame,
                 cat_key,
-                cat_info['name'],
+                cat_info['name_key'],
                 cat_info['icon'],
                 cat_info['tests'],
                 cat_info['labels'],
@@ -795,19 +839,18 @@ class TestResultsPanelV2(ttk.Frame):
             self.test_groups[cat_key] = group
         
         # Notes section
-        notes_frame = tk.LabelFrame(
+        self.notes_frame = tk.LabelFrame(
             self.scroll_frame,
-            text='📝 Notlar / Gözlemler',
             font=FONTS.get('heading', ('Segoe UI', 11, 'bold')),
             bg=COLORS['bg_panel'],
             fg=COLORS['text_primary'],
             padx=10,
             pady=5
         )
-        notes_frame.pack(fill=tk.X, pady=10)
+        self.notes_frame.pack(fill=tk.X, pady=10)
         
         self.notes_text = tk.Text(
-            notes_frame,
+            self.notes_frame,
             height=3,
             bg=COLORS['bg_input'],
             fg=COLORS['text_primary'],
@@ -821,10 +864,14 @@ class TestResultsPanelV2(ttk.Frame):
         btn_frame = tk.Frame(self.scroll_frame, bg=COLORS['bg_panel'])
         btn_frame.pack(fill=tk.X, pady=10)
         
-        ttk.Button(btn_frame, text='💾 Kaydet', style='Primary.TButton', command=self._save).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text='📤 ML\'e Gönder', style='Success.TButton', command=self._save_to_ml).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text='🔄 Temizle', command=self._clear).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text='📋 Öncekinden Kopyala', command=self._copy_from_previous).pack(side=tk.LEFT, padx=2)
+        self.save_btn = ttk.Button(btn_frame, style='Primary.TButton', command=self._save, text=t(TK.SAVE))
+        self.save_btn.pack(side=tk.LEFT, padx=2)
+        self.ml_btn = ttk.Button(btn_frame, style='Success.TButton', command=self._save_to_ml, text=t(TK.TEST_ADD_TO_ML))
+        self.ml_btn.pack(side=tk.LEFT, padx=2)
+        self.clear_btn = ttk.Button(btn_frame, command=self._clear, text=t(TK.FORM_CLEAN))
+        self.clear_btn.pack(side=tk.LEFT, padx=2)
+        self.copy_btn = ttk.Button(btn_frame, command=self._copy_from_previous, text=t(TK.TEST_COPY_PREVIOUS))
+        self.copy_btn.pack(side=tk.LEFT, padx=2)
         
         # =====================================================================
         # RIGHT PANEL - ML Integration
@@ -834,6 +881,7 @@ class TestResultsPanelV2(ttk.Frame):
         
         # Set initial ML data
         self._update_ml_panel()
+        self._update_texts()
     
     def _on_formulation_selected(self, event=None):
         """Handle formulation selection"""
@@ -916,17 +964,18 @@ class TestResultsPanelV2(ttk.Frame):
                 
                 if higher_is_better:
                     if num_val > good * 1.1:
-                        comments.append(f'{label}: Beklentinin %{int((num_val/good - 1) * 100)} üstünde ✓')
+                        pct = int((num_val/good - 1) * 100)
+                        comments.append(t(TK.ML_COMMENT_ABOVE, label=label, pct=pct))
                     elif num_val < good * 0.5:
-                        comments.append(f'{label}: ⚠ Kritik eşik altında')
+                        comments.append(t(TK.ML_COMMENT_BELOW_CRITICAL, label=label))
                 else:
                     if num_val < good * 0.9:
-                        comments.append(f'{label}: Beklentinin altında (iyi) ✓')
+                        comments.append(t(TK.ML_COMMENT_BELOW_GOOD, label=label))
                     elif num_val > good * 2:
-                        comments.append(f'{label}: ⚠ Tolerans dışında')
+                        comments.append(t(TK.ML_COMMENT_OUT_OF_TOLERANCE, label=label))
         
         if not comments:
-            comments = ['Değer girildikçe yorumlar burada görünecek.']
+            comments = [t(TK.DASHBOARD_NO_INSIGHTS)] # Reuse or use generic one
         
         self.ml_panel.set_comments(comments[:5])  # Max 5 comments
     
@@ -950,20 +999,20 @@ class TestResultsPanelV2(ttk.Frame):
         except Exception:
             self.ml_panel.set_confidence(0)
             self.ml_panel.set_training_info('—', 0)
-        
-        self.ml_panel.set_comments(['Değer girildikçe yorumlar burada görünecek.'])
+        # Default empty state
+        self.ml_panel.set_comments([t(TK.ML_EMPTY_SUGGESTIONS)])
     
     def _save(self):
         """Save test results to database"""
         data = self.get_test_data()
         
         if not self.formulation_combo.get():
-            messagebox.showwarning('Uyarı', 'Formülasyon seçmelisiniz!')
+            messagebox.showwarning(t(TK.common_warning if hasattr(TK, 'common_warning') else TK.WARNING), t(TK.MSG_CHOOSE_FORMULATION))
             return
         
         if self.on_save:
             self.on_save(data)
-            messagebox.showinfo('Başarılı', '✅ Test sonuçları kaydedildi!')
+            messagebox.showinfo(t(TK.common_success if hasattr(TK, 'common_success') else TK.SUCCESS), f"✅ {t(TK.MSG_SAVED)}")
     
     def _save_to_ml(self):
         """Save and add to ML training queue"""
@@ -973,9 +1022,8 @@ class TestResultsPanelV2(ttk.Frame):
         if self.on_save:
             self.on_save(data)
             messagebox.showinfo(
-                'ML Kuyruğuna Eklendi',
-                '✅ Test sonuçları kaydedildi ve ML eğitim kuyruğuna eklendi.\n\n'
-                'Model, yeterli yeni veri toplandığında otomatik güncellenecek.'
+                t(TK.ML_CENTER_TITLE),
+                f"✅ {t(TK.MSG_SAVED)}\n\n" + t(TK.MSG_AUTO_ADD_MATERIALS) # Reusing info key or similar
             )
     
     def _clear(self):
@@ -985,22 +1033,22 @@ class TestResultsPanelV2(ttk.Frame):
         
         self.notes_text.delete(1.0, tk.END)
         self._update_status_cards()
-        self.ml_panel.set_comments(['Değer girildikçe yorumlar burada görünecek.'])
+        self.ml_panel.set_comments([t(TK.ML_EMPTY_SUGGESTIONS)])
     
     def _copy_from_previous(self):
         """Copy values from previous test"""
         formulation = self.formulation_combo.get()
         if not formulation:
-            messagebox.showwarning('Uyarı', 'Önce formülasyon seçin!')
+            messagebox.showwarning(t(TK.common_warning if hasattr(TK, 'common_warning') else TK.WARNING), t(TK.MSG_CHOOSE_FORMULATION))
             return
         
         if self.on_load_trial:
             trial_data = self.on_load_trial(formulation)
             if trial_data:
                 self._load_trial_data(trial_data)
-                messagebox.showinfo('Bilgi', 'Önceki test değerleri kopyalandı.')
+                messagebox.showinfo(t(TK.common_info if hasattr(TK, 'common_info') else TK.INFO), t(TK.MSG_PREV_TEST_COPIED))
             else:
-                messagebox.showinfo('Bilgi', 'Bu formülasyon için önceki test bulunamadı.')
+                messagebox.showinfo(t(TK.common_info if hasattr(TK, 'common_info') else TK.INFO), t(TK.MSG_NO_PREV_TEST))
     
     def get_test_data(self) -> Dict:
         """Get all test data as dictionary"""
@@ -1061,10 +1109,10 @@ class TestResultsPanelV2(ttk.Frame):
             
             # Compare key metrics
             metrics = [
-                ('hardness_konig', 'Sertlik'),
-                ('gloss_60', 'Parlaklık'),
-                ('adhesion', 'Yapışma'),
-                ('corrosion_resistance', 'Korozyon'),
+                ('hardness_konig', t(TK.TEST_HARDNESS_KONIG)),
+                ('gloss_60', t(TK.TEST_GLOSS60)),
+                ('adhesion', t(TK.TEST_ADHESION)),
+                ('corrosion_resistance', t(TK.TEST_CORROSION)),
             ]
             
             for key, label in metrics:
@@ -1093,3 +1141,29 @@ class TestResultsPanelV2(ttk.Frame):
             if comparison_data:
                 self.ml_panel.set_comparison_data(comparison_data)
 
+    def _update_texts(self):
+        """Update overall panel texts"""
+        self.main_title.config(text=t(TK.TEST_RESULTS_TITLE))
+        self.label_formulation.config(text=t(TK.FORM_SAVED_FORMULAS) + ":")
+        self.label_date.config(text=t(TK.TEST_DATE))
+        self.notes_frame.config(text=t(TK.TEST_NOTES))
+        
+        # Update sub-panels
+        for card in self.status_cards.values():
+            card._update_texts()
+            
+        for group in self.test_groups.values():
+            group._update_texts()
+            
+        if self.ml_panel:
+            self.ml_panel._update_texts()
+            
+        # Update Action Buttons
+        self.save_btn.config(text=t(TK.SAVE))
+        self.ml_btn.config(text=t(TK.TEST_ADD_TO_ML))
+        self.clear_btn.config(text=t(TK.FORM_CLEAN))
+        self.copy_btn.config(text=t(TK.TEST_COPY_PREVIOUS))
+            
+        # Refresh current charts/insights if data exists
+        if self.current_formulation_code:
+            self._update_charts(self.current_formulation_code)

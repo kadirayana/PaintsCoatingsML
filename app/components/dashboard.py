@@ -9,23 +9,25 @@ from tkinter import ttk
 from typing import Callable, Dict, List, Optional
 import logging
 
+from src.core.i18n import t, I18nMixin
+from src.core.translation_keys import TK
+
 logger = logging.getLogger(__name__)
 
 
-class DashboardPanel(ttk.LabelFrame):
+class DashboardPanel(ttk.LabelFrame, I18nMixin):
     """
     Dashboard paneli - İstatistik kartları, grafikler ve içgörüler
-    
-    Matplotlib entegreli, tıklanabilir istatistik kartları içerir.
     """
     
     # Kart -> Sekme eşlemesi (0-indexed)
     # Tab order: 0=Dashboard, 1=Malzemeler, 2=Formülasyon, 3=Test Sonuçları, 4=ML Merkezi, 5=Karşılaştırma
     CARD_TAB_MAPPING = {
-        "Toplam Formül": 2,      # Formülasyon sekmesi
-        "Bu Ay Eklenen": 2,      # Formülasyon sekmesi
-        "Test Bekleyen": 3,      # Test Sonuçları sekmesi
-        "Başarılı": 4            # ML Merkezi sekmesi
+        "Toplam Formül": 2,      # Still using hardcoded string from DB? No, DB returns language-neutral.
+        "total_formulas": 2,
+        "added_this_month": 2,
+        "waiting_test": 3,
+        "successful": 4
     }
     
     def __init__(self, parent, on_navigate: Callable = None):
@@ -34,13 +36,15 @@ class DashboardPanel(ttk.LabelFrame):
             parent: Üst widget
             on_navigate: Kart tıklandığında çağrılacak callback(card_label)
         """
-        super().__init__(parent, text="📈 Dashboard", padding=10)
+        super().__init__(parent, padding=10)
         
         self.on_navigate = on_navigate
         self.has_matplotlib = False
         
+        self.setup_i18n()
         self._create_stat_cards()
         self._create_content_area()
+        self._update_texts()
     
     def _create_stat_cards(self):
         """İstatistik kartlarını oluştur"""
@@ -49,17 +53,44 @@ class DashboardPanel(ttk.LabelFrame):
         
         self.stat_cards = {}
         stats = [
-            ("Toplam Formül", "0"),
-            ("Bu Ay Eklenen", "0"),
-            ("Test Bekleyen", "0"),
-            ("Başarılı", "0")
+            (TK.DASHBOARD_STATS_TOTAL, "0"),
+            (TK.DASHBOARD_STATS_MONTHLY, "0"),
+            (TK.DASHBOARD_STATS_WAITING, "0"),
+            (TK.DASHBOARD_STATS_SUCCESS, "0")
         ]
         
-        for i, (label, value) in enumerate(stats):
-            card = self._create_stat_card(stats_frame, label, value)
+        for i, (key, value) in enumerate(stats):
+            card = self._create_stat_card(stats_frame, key, value)
             card.grid(row=0, column=i, padx=5, sticky="nsew")
-            self.stat_cards[label] = card
+            self.stat_cards[key] = card
             stats_frame.columnconfigure(i, weight=1)
+    
+    def _update_texts(self):
+        """i18n text update"""
+        # Note: self is a Frame, it doesn't have text. Tab text is handled by MainApp.
+        self.chart_frame.config(text=t(TK.DASHBOARD_CHARTS))
+        self.insight_frame.config(text=t(TK.DASHBOARD_INSIGHTS))
+        
+        # Update placeholder label
+        if hasattr(self, 'no_insights_placeholder'):
+            self.no_insights_placeholder.config(text=t(TK.DASHBOARD_NO_INSIGHTS))
+        
+        # Update cards
+        # Note: self.stat_cards keys are TK constants (e.g. "dashboard.total_formulas")
+        for key, card in self.stat_cards.items():
+            for widget in card.winfo_children():
+                # Value label has bold font, label name doesn't
+                font = str(widget.cget('font'))
+                if 'bold' not in font:
+                    widget.config(text=t(key))
+        
+        # Update charts if they exist
+        if self.has_matplotlib:
+            self.ax1.set_title(t(TK.DASHBOARD_CHART_MONTHLY), fontsize=10, color='white')
+            self.ax1.set_ylabel(t(TK.DASHBOARD_CHART_Y_AXIS), fontsize=9, color='white')
+            self.ax2.set_title(t(TK.DASHBOARD_CHART_STATUS), fontsize=10, color='white')
+            # Pie chart labels are trickier to update without redrawing
+            self.canvas.draw()
     
     def _create_content_area(self):
         """Grafik ve içgörü alanını oluştur"""
@@ -98,11 +129,12 @@ class DashboardPanel(ttk.LabelFrame):
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
         # İlk mesaj
-        ttk.Label(
+        self.no_insights_placeholder = ttk.Label(
             self.insight_content,
-            text="Henüz içgörü yok.",
+            text=t(TK.DASHBOARD_NO_INSIGHTS),
             foreground="#888"
-        ).pack(pady=10, padx=10)
+        )
+        self.no_insights_placeholder.pack(pady=10, padx=10)
     
     def _on_content_resize(self, event):
         """Handle responsive layout on resize"""
@@ -181,23 +213,23 @@ class DashboardPanel(ttk.LabelFrame):
         """Başlangıç grafiklerini çiz"""
         # Sol grafik - Bar chart
         self.ax1.clear()
-        months = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz']
+        month_names = [t(f"common.month_{i:02d}") for i in range(1, 7)] # Jan to Jun
         values = [0, 0, 0, 0, 0, 0]
-        self.ax1.bar(months, values, color='#4CAF50', alpha=0.8)
-        self.ax1.set_title('Aylık Formülasyon', fontsize=10, color='white')
-        self.ax1.set_ylabel('Adet', fontsize=9, color='white')
+        self.ax1.bar(month_names, values, color='#4CAF50', alpha=0.8)
+        self.ax1.set_title(t(TK.DASHBOARD_CHART_MONTHLY), fontsize=10, color='white')
+        self.ax1.set_ylabel(t(TK.DASHBOARD_CHART_Y_AXIS), fontsize=9, color='white')
         self.ax1.set_ylim(0, 10)
         
         # Sağ grafik - Pie chart
         self.ax2.clear()
-        categories = ['Başarılı', 'Test Bekleyen', 'Taslak']
+        categories = [t(TK.DASHBOARD_STATS_SUCCESS), t(TK.DASHBOARD_STATS_WAITING), t(TK.FORM_SAVED_FORMULAS)]
         sizes = [1, 1, 1]
         colors = ['#4CAF50', '#FFC107', '#9E9E9E']
         self.ax2.pie(
             sizes, labels=categories, colors=colors, autopct='%1.0f%%',
             textprops={'color': 'white', 'fontsize': 8}
         )
-        self.ax2.set_title('Durum Dağılımı', fontsize=10, color='white')
+        self.ax2.set_title(t(TK.DASHBOARD_CHART_STATUS), fontsize=10, color='white')
         
         self.fig.tight_layout()
     
@@ -208,7 +240,7 @@ class DashboardPanel(ttk.LabelFrame):
         value_label = ttk.Label(card, text=value, font=("Helvetica", 24, "bold"))
         value_label.pack()
         
-        name_label = ttk.Label(card, text=label, font=("Helvetica", 10))
+        name_label = ttk.Label(card, text=t(label), font=("Helvetica", 10))
         name_label.pack()
         
         # Tıklama ve hover olayları
@@ -275,7 +307,7 @@ class DashboardPanel(ttk.LabelFrame):
         if not insights:
             ttk.Label(
                 self.insight_content,
-                text="Şu an için yeni bir içgörü yok.",
+                text=t(TK.DASHBOARD_NO_INSIGHTS),
                 foreground="#888"
             ).pack(pady=10, padx=10)
             return
@@ -302,7 +334,7 @@ class DashboardPanel(ttk.LabelFrame):
             
             ttk.Label(
                 frame,
-                text=f"{icon} {insight.get('title', 'İçgörü')}",
+                text=f"{icon} {insight.get('title', t(TK.DASHBOARD_INSIGHTS))}",
                 font=("Helvetica", 9, "bold")
             ).pack(anchor=tk.W)
             
@@ -320,44 +352,41 @@ class DashboardPanel(ttk.LabelFrame):
             self.ax1.clear()
             
             if monthly_data and len(monthly_data) > 0:
-                month_names = {
-                    '01': 'Oca', '02': 'Şub', '03': 'Mar', '04': 'Nis',
-                    '05': 'May', '06': 'Haz', '07': 'Tem', '08': 'Ağu',
-                    '09': 'Eyl', '10': 'Eki', '11': 'Kas', '12': 'Ara'
-                }
                 months = []
                 values = []
                 for item in monthly_data:
                     month_num = item['month'].split('-')[1]
-                    months.append(month_names.get(month_num, month_num))
+                    months.append(t(f"common.month_{month_num}"))
                     values.append(item['count'])
             else:
-                months = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz']
-                total = int(stats.get('Toplam Formül', 0))
+                # Localized default months
+                months = [t(f"common.month_0{i}") for i in range(1, 7)]
+                total = int(stats.get('Toplam Formül', stats.get('total_formulas', 0)))
                 values = [0] * 5 + [total]
             
             self.ax1.bar(months, values, color='#4CAF50', alpha=0.8)
-            self.ax1.set_title('Aylık Formülasyon', fontsize=10, color='white')
-            self.ax1.set_ylabel('Adet', fontsize=9, color='white')
+            self.ax1.set_title(t(TK.DASHBOARD_CHART_MONTHLY), fontsize=10, color='white')
+            self.ax1.set_ylabel(t(TK.DASHBOARD_CHART_Y_AXIS), fontsize=9, color='white')
             self.ax1.set_facecolor('#3c3c3c')
             self.ax1.tick_params(colors='white')
             
             # Sağ grafik - Durum dağılımı
             self.ax2.clear()
-            tested = max(1, int(stats.get('Başarılı', 0) or 0))
-            waiting = max(1, int(stats.get('Test Bekleyen', 0) or 0))
-            total = int(stats.get('Toplam Formül', 0) or 0)
+            tested = max(1, int(stats.get('successful', stats.get('Başarılı', 0)) or 0))
+            waiting = max(1, int(stats.get('waiting_test', stats.get('Test Bekleyen', 0)) or 0))
+            total = int(stats.get('total_formulas', stats.get('Toplam Formül', 0)) or 0)
             draft = max(1, total - tested - waiting)
             
             sizes = [tested, waiting, draft]
-            categories = ['Test Edildi', 'Bekleyen', 'Taslak']
+            # Mapping status keys to translations
+            categories = [t(TK.DASHBOARD_STATS_SUCCESS), t(TK.DASHBOARD_STATS_WAITING), t(TK.FORM_SAVED_FORMULAS)] # "Taslak" as Formulation
             colors = ['#4CAF50', '#FFC107', '#9E9E9E']
             
             self.ax2.pie(
                 sizes, labels=categories, colors=colors, autopct='%1.0f%%',
                 textprops={'color': 'white', 'fontsize': 8}
             )
-            self.ax2.set_title('Durum Dağılımı', fontsize=10, color='white')
+            self.ax2.set_title(t(TK.DASHBOARD_CHART_STATUS), fontsize=10, color='white')
             
             self.fig.tight_layout()
             self.canvas.draw()

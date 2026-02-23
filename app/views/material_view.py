@@ -507,7 +507,7 @@ class MaterialManagementPanel(ttk.Frame):
             return
         
         name = self.entries['name'].get()
-        if not messagebox.askyesno("Onay", f"'{name}' malzemesini silmek istediğinizden emin misiniz?"):
+        if not messagebox.askyesno(t(TK.common_confirm if hasattr(TK, 'common_confirm') else TK.CONFIRM), t(TK.MSG_DELETE_CONFIRM).replace('{item}', f"'{name}'")):
             return
         
         try:

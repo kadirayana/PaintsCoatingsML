@@ -12,12 +12,14 @@ from typing import Callable, Dict, List, Optional
 import threading
 import logging
 
+from src.core.i18n import t, I18nMixin
+from src.core.translation_keys import TK
 from app.components.editor.excel_style_grid import ExcelStyleGrid
 
 logger = logging.getLogger(__name__)
 
 
-class ModernFormulationEditor(ttk.LabelFrame):
+class ModernFormulationEditor(ttk.LabelFrame, I18nMixin):
     """
     Modern Excel-style Formulation Editor.
     
@@ -41,7 +43,7 @@ class ModernFormulationEditor(ttk.LabelFrame):
         on_create_material: Callable = None,
         **kwargs
     ):
-        super().__init__(parent, text="📋 Formülasyon Editörü", padding=10, **kwargs)
+        super().__init__(parent, padding=10, **kwargs)
         
         self.on_save = on_save
         self.on_calculate = on_calculate
@@ -55,8 +57,47 @@ class ModernFormulationEditor(ttk.LabelFrame):
         self.formulation_list = []
         self.on_predict = None
         
+        self.setup_i18n()
         self._create_ui()
+        self._update_texts()
     
+    def _update_texts(self):
+        """Update texts for i18n"""
+        self.config(text=t(TK.FORM_TITLE))
+        self.project_frame.config(text=t(TK.FORM_PROJECT))
+        self.project_label.config(text=f"{t(TK.FORM_PROJECT)}:")
+        self.new_project_btn.config(text=t(TK.NAV_NEW_PROJECT))
+        self.formula_frame.config(text=t(TK.FORM_SAVED_FORMULAS))
+        self.saved_label.config(text=f"{t(TK.FORM_SAVED_FORMULAS)}:")
+        self.code_label.config(text=f"{t(TK.FORM_CODE)}:")
+        self.name_label.config(text=f"{t(TK.FORM_NAME)}:")
+        
+        # Grid instructions
+        self.grid_instructions.config(text=t(TK.FORM_GRID_HELP))
+        
+        # Footer
+        self.summary_frame.config(text=f" {t(TK.INFO)}")
+        self.summary_labels['total_quantity'][0].config(text=t(TK.FORM_TOTAL_QUANTITY))
+        self.summary_labels['total_solid'][0].config(text=t(TK.FORM_TOTAL_SOLID))
+        self.summary_labels['solid_percent'][0].config(text=t(TK.FORM_SOLID_PERCENT))
+        self.summary_labels['total_cost'][0].config(text=t(TK.FORM_TOTAL_COST))
+        self.summary_labels['row_count'][0].config(text=t(TK.FORM_ROW_COUNT))
+        
+        # Buttons
+        self.clear_btn.config(text=t(TK.FORM_CLEAN))
+        self.template_btn.config(text=t(TK.FORM_DOWNLOAD_TEMPLATE))
+        self.import_btn.config(text=t(TK.FORM_IMPORT))
+        self.export_btn.config(text=t(TK.FORM_EXPORT))
+        self.predict_btn.config(text=t(TK.FORM_PREDICT))
+        self.calc_btn.config(text=t(TK.FORM_CALCULATE))
+        self.save_btn.config(text=t(TK.SAVE))
+        self.variant_btn.config(text=t(TK.FORM_NEW_VARIATION))
+        
+        # Prediction
+        self.prediction_frame.config(text=t(TK.FORM_PREDICT))
+        self.thickness_label.config(text=f"{t(TK.PARAM_COATING_THICKNESS if hasattr(TK, 'PARAM_COATING_THICKNESS') else 'Film Kalınlığı')} (µm):")
+        self.predict_now_btn.config(text=t(TK.FORM_PREDICT))
+
     def _create_ui(self):
         """Create the modern UI layout"""
         
@@ -75,38 +116,42 @@ class ModernFormulationEditor(ttk.LabelFrame):
         header_frame.pack(fill=tk.X, pady=(0, 10))
         
         # Project selector
-        project_frame = ttk.LabelFrame(header_frame, text="📁 Proje", padding=5)
-        project_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        self.project_frame = ttk.LabelFrame(header_frame, padding=5)
+        self.project_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
         
-        ttk.Label(project_frame, text="Proje:").pack(side=tk.LEFT)
-        self.project_combo = ttk.Combobox(project_frame, width=25, state='readonly')
+        self.project_label = ttk.Label(self.project_frame)
+        self.project_label.pack(side=tk.LEFT)
+        self.project_combo = ttk.Combobox(self.project_frame, width=25, state='readonly')
         self.project_combo.pack(side=tk.LEFT, padx=5)
         self.project_combo.bind('<<ComboboxSelected>>', self._on_project_selected)
         
-        ttk.Button(
-            project_frame, 
-            text="➕ Yeni Proje",
+        self.new_project_btn = ttk.Button(
+            self.project_frame, 
             command=self._create_new_project
-        ).pack(side=tk.LEFT, padx=5)
+        )
+        self.new_project_btn.pack(side=tk.LEFT, padx=5)
         
         # Formulation selector
-        formula_frame = ttk.LabelFrame(header_frame, text="📋 Formülasyon", padding=5)
-        formula_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.formula_frame = ttk.LabelFrame(header_frame, padding=5)
+        self.formula_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
-        ttk.Label(formula_frame, text="Kayıtlı:").pack(side=tk.LEFT)
-        self.formulation_combo = ttk.Combobox(formula_frame, width=20, state='readonly')
+        self.saved_label = ttk.Label(self.formula_frame)
+        self.saved_label.pack(side=tk.LEFT)
+        self.formulation_combo = ttk.Combobox(self.formula_frame, width=20, state='readonly')
         self.formulation_combo.pack(side=tk.LEFT, padx=5)
         self.formulation_combo.bind('<<ComboboxSelected>>', self._on_formulation_selected)
         
         # Formula code/name
-        ttk.Separator(formula_frame, orient='vertical').pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        ttk.Separator(self.formula_frame, orient='vertical').pack(side=tk.LEFT, fill=tk.Y, padx=10)
         
-        ttk.Label(formula_frame, text="Kod:").pack(side=tk.LEFT)
-        self.formula_code_entry = ttk.Entry(formula_frame, width=12)
+        self.code_label = ttk.Label(self.formula_frame)
+        self.code_label.pack(side=tk.LEFT)
+        self.formula_code_entry = ttk.Entry(self.formula_frame, width=12)
         self.formula_code_entry.pack(side=tk.LEFT, padx=5)
         
-        ttk.Label(formula_frame, text="Ad:").pack(side=tk.LEFT)
-        self.formula_name_entry = ttk.Entry(formula_frame, width=20)
+        self.name_label = ttk.Label(self.formula_frame)
+        self.name_label.pack(side=tk.LEFT)
+        self.formula_name_entry = ttk.Entry(self.formula_frame, width=20)
         self.formula_name_entry.pack(side=tk.LEFT, padx=5)
     
     def _create_grid_section(self):
@@ -125,13 +170,12 @@ class ModernFormulationEditor(ttk.LabelFrame):
         self.grid.pack(fill=tk.BOTH, expand=True)
         
         # Instructions label
-        instructions = ttk.Label(
+        self.grid_instructions = ttk.Label(
             grid_frame,
-            text="💡 Çift tıklayarak düzenleyin • Tab ile sonraki hücreye geçin • Enter ile onaylayın",
             font=('Segoe UI', 9, 'italic'),
             foreground='gray'
         )
-        instructions.pack(anchor='w', pady=(5, 0))
+        self.grid_instructions.pack(anchor='w', pady=(5, 0))
     
     def _create_footer_section(self):
         """Create summary and action buttons"""
@@ -139,8 +183,8 @@ class ModernFormulationEditor(ttk.LabelFrame):
         footer_frame.pack(fill=tk.X, pady=(10, 0))
         
         # === Summary Row ===
-        summary_frame = ttk.LabelFrame(footer_frame, text=" Özet", padding=5)
-        summary_frame.pack(fill=tk.X, pady=(0, 10))
+        self.summary_frame = ttk.LabelFrame(footer_frame, padding=5)
+        self.summary_frame.pack(fill=tk.X, pady=(0, 10))
         
         self.summary_labels = {}
         summaries = [
@@ -151,14 +195,15 @@ class ModernFormulationEditor(ttk.LabelFrame):
             ('row_count', '📝 Satır:', '0'),
         ]
         
-        for key, label, default in summaries:
-            frame = ttk.Frame(summary_frame)
+        for key, label_text, default in summaries:
+            frame = ttk.Frame(self.summary_frame)
             frame.pack(side=tk.LEFT, padx=15)
             
-            ttk.Label(frame, text=label).pack(side=tk.LEFT)
+            lbl = ttk.Label(frame)
+            lbl.pack(side=tk.LEFT)
             value_lbl = ttk.Label(frame, text=default, font=('Segoe UI', 10, 'bold'))
             value_lbl.pack(side=tk.LEFT, padx=5)
-            self.summary_labels[key] = value_lbl
+            self.summary_labels[key] = (lbl, value_lbl)
         
         # === Action Buttons ===
         btn_frame = ttk.Frame(footer_frame)
@@ -168,58 +213,58 @@ class ModernFormulationEditor(ttk.LabelFrame):
         left_btns = ttk.Frame(btn_frame)
         left_btns.pack(side=tk.LEFT)
         
-        ttk.Button(
+        self.clear_btn = ttk.Button(
             left_btns,
-            text="🧹 Temizle",
             command=self._clear_all
-        ).pack(side=tk.LEFT, padx=2)
+        )
+        self.clear_btn.pack(side=tk.LEFT, padx=2)
         
-        ttk.Button(
+        self.template_btn = ttk.Button(
             left_btns,
-            text="📥 Şablon İndir",
             command=self._download_template
-        ).pack(side=tk.LEFT, padx=2)
+        )
+        self.template_btn.pack(side=tk.LEFT, padx=2)
         
-        ttk.Button(
+        self.import_btn = ttk.Button(
             left_btns,
-            text="📥 Excel'den Yükle",
             command=self._load_from_excel
-        ).pack(side=tk.LEFT, padx=2)
+        )
+        self.import_btn.pack(side=tk.LEFT, padx=2)
         
-        ttk.Button(
+        self.export_btn = ttk.Button(
             left_btns,
-            text="📤 Excel'e Aktar",
             command=self._export_to_excel
-        ).pack(side=tk.LEFT, padx=2)
+        )
+        self.export_btn.pack(side=tk.LEFT, padx=2)
         
         # Right side - Main actions
         right_btns = ttk.Frame(btn_frame)
         right_btns.pack(side=tk.RIGHT)
         
-        ttk.Button(
+        self.predict_btn = ttk.Button(
             right_btns,
-            text="🔮 Tahmin Et",
             command=self._predict_results
-        ).pack(side=tk.LEFT, padx=2)
+        )
+        self.predict_btn.pack(side=tk.LEFT, padx=2)
         
-        ttk.Button(
+        self.calc_btn = ttk.Button(
             right_btns,
-            text="📊 Hesapla",
             command=self._calculate
-        ).pack(side=tk.LEFT, padx=2)
+        )
+        self.calc_btn.pack(side=tk.LEFT, padx=2)
         
-        ttk.Button(
+        self.save_btn = ttk.Button(
             right_btns,
-            text="💾 Kaydet",
             command=self._save,
             style='Accent.TButton'
-        ).pack(side=tk.LEFT, padx=2, ipadx=10)
+        )
+        self.save_btn.pack(side=tk.LEFT, padx=2, ipadx=10)
         
-        ttk.Button(
+        self.variant_btn = ttk.Button(
             right_btns,
-            text="📑 Yeni Varyasyon",
             command=self._save_as_variation
-        ).pack(side=tk.LEFT, padx=2)
+        )
+        self.variant_btn.pack(side=tk.LEFT, padx=2)
         
         # === Prediction Panel (Collapsed by default) ===
         self._create_prediction_panel(footer_frame)
@@ -233,16 +278,17 @@ class ModernFormulationEditor(ttk.LabelFrame):
         input_row = ttk.Frame(self.prediction_frame)
         input_row.pack(fill=tk.X, pady=(0, 5))
         
-        ttk.Label(input_row, text="Kaplama Kalınlığı (µm):").pack(side=tk.LEFT)
+        self.thickness_label = ttk.Label(input_row)
+        self.thickness_label.pack(side=tk.LEFT)
         self.thickness_entry = ttk.Entry(input_row, width=8)
         self.thickness_entry.insert(0, "30")
         self.thickness_entry.pack(side=tk.LEFT, padx=5)
         
-        ttk.Button(
+        self.predict_now_btn = ttk.Button(
             input_row,
-            text="🔮 Tahmin Yap",
             command=self._predict_results
-        ).pack(side=tk.LEFT, padx=10)
+        )
+        self.predict_now_btn.pack(side=tk.LEFT, padx=10)
         
         # Results text
         self.prediction_text = tk.Text(
@@ -339,7 +385,7 @@ class ModernFormulationEditor(ttk.LabelFrame):
     
     def _clear_all(self):
         """Clear all data"""
-        if messagebox.askyesno("Temizle", "Tüm veriler silinecek. Emin misiniz?"):
+        if messagebox.askyesno(t(TK.common_confirm if hasattr(TK, 'common_confirm') else TK.CONFIRM), t(TK.MSG_ARE_YOU_SURE)):
             self.grid.clear_all()
             self.formula_code_entry.delete(0, tk.END)
             self.formula_name_entry.delete(0, tk.END)
@@ -363,7 +409,7 @@ class ModernFormulationEditor(ttk.LabelFrame):
         # Ask for new variation code
         from tkinter import simpledialog
         current_code = self.formula_code_entry.get().strip()
-        new_code = simpledialog.askstring("Yeni Varyasyon", "Yeni Varyasyon Kodu:", initialvalue=current_code + "-v2")
+        new_code = simpledialog.askstring(t(TK.FORM_NEW_VARIATION), f"{t(TK.FORM_NEW_VARIATION)} {t(TK.FORM_CODE)}:", initialvalue=current_code + "-v2")
         
         if new_code:
             self.formula_code_entry.delete(0, tk.END)
@@ -376,14 +422,14 @@ class ModernFormulationEditor(ttk.LabelFrame):
         formula_name = self.formula_name_entry.get().strip()
         
         if not formula_code:
-            messagebox.showwarning("Uyarı", "Lütfen formül kodu girin!")
+            messagebox.showwarning(t(TK.common_warning if hasattr(TK, 'common_warning') else TK.WARNING), t(TK.MSG_ENTER_CODE))
             self.formula_code_entry.focus_set()
             return
         
         data = self.get_formulation_data()
         
         if not data.get('components'):
-            messagebox.showwarning("Uyarı", "Formülasyonda en az bir bileşen olmalı!")
+            messagebox.showwarning(t(TK.common_warning if hasattr(TK, 'common_warning') else TK.WARNING), t(TK.MSG_MIN_ONE_COMPONENT))
             return
             
         data['is_new_variation'] = is_new_variation
@@ -391,14 +437,14 @@ class ModernFormulationEditor(ttk.LabelFrame):
         if self.on_save:
             result = self.on_save(data)
             if result:
-                messagebox.showinfo("Başarılı", "Formülasyon kaydedildi!")
+                messagebox.showinfo(t(TK.common_success if hasattr(TK, 'common_success') else TK.SUCCESS), t(TK.MSG_SAVED))
     
     def _download_template(self):
         """Download Excel template for formulation data entry"""
         file_path = filedialog.asksaveasfilename(
-            title="Şablonu Kaydet",
+            title=t(TK.FORM_DOWNLOAD_TEMPLATE),
             defaultextension=".xlsx",
-            filetypes=[("Excel Dosyası", "*.xlsx")],
+            filetypes=[(t(TK.common_info if hasattr(TK, 'common_info') else TK.INFO), "*.xlsx")],
             initialfile="formulasyon_sablonu.xlsx"
         )
         
@@ -457,8 +503,8 @@ class ModernFormulationEditor(ttk.LabelFrame):
                 'validate': 'decimal',
                 'criteria': '>',
                 'value': 0,
-                'error_message': 'Miktar 0\'dan büyük bir sayı olmalıdır.',
-                'error_title': 'Geçersiz Değer'
+                'error_message': f"{t(TK.FORM_QUANTITY)} 0'dan büyük bir sayı olmalıdır.",
+                'error_title': t(TK.common_warning if hasattr(TK, 'common_warning') else TK.WARNING)
             })
             
             # === FORMAT DATA CELLS ===
@@ -496,10 +542,10 @@ class ModernFormulationEditor(ttk.LabelFrame):
             workbook.close()
             
             messagebox.showinfo(
-                "Başarılı", 
-                f"Şablon dosyası oluşturuldu:\n{file_path}\n\n"
-                "Bu şablonu doldurup 'Excel'den Yükle' ile içe aktarabilirsiniz.\n\n"
-                "NOT: Yeni malzeme kodları otomatik olarak veritabanına eklenecektir."
+                t(TK.common_success if hasattr(TK, 'common_success') else TK.SUCCESS), 
+                f"{t(TK.FORM_DOWNLOAD_TEMPLATE)} {t(TK.MSG_SAVED)}:\n{file_path}\n\n"
+                f"{t(TK.FORM_IMPORT)} {t(TK.common_info if hasattr(TK, 'common_info') else TK.INFO)}.\n\n"
+                f"NOT: {t(TK.MSG_AUTO_ADD_MATERIALS)}"
             )
             
         except ImportError:
@@ -514,11 +560,11 @@ class ModernFormulationEditor(ttk.LabelFrame):
     def _load_from_excel(self):
         """Load from Excel file"""
         file_path = filedialog.askopenfilename(
-            title="Excel Dosyası Seç",
+            title=t(TK.FORM_IMPORT),
             filetypes=[
-                ("Excel Dosyaları", "*.xlsx *.xls"),
-                ("CSV Dosyaları", "*.csv"),
-                ("Tüm Dosyalar", "*.*")
+                ("Excel", "*.xlsx *.xls"),
+                ("CSV", "*.csv"),
+                (t(TK.common_all if hasattr(TK, 'common_all') else "Tümü"), "*.*")
             ]
         )
         
@@ -543,7 +589,7 @@ class ModernFormulationEditor(ttk.LabelFrame):
             df = pd.read_excel(file_path, sheet_name=0)
             
             if df.empty:
-                messagebox.showwarning("Uyarı", "Excel dosyası boş!")
+                messagebox.showwarning(t(TK.common_warning if hasattr(TK, 'common_warning') else TK.WARNING), t(TK.MSG_EMPTY_FILE))
                 return
             
             # Normalize columns - handle template and legacy formats
@@ -642,27 +688,27 @@ class ModernFormulationEditor(ttk.LabelFrame):
                 # User feedback
                 if created_materials:
                     messagebox.showinfo(
-                        "İçe Aktarma Tamamlandı",
-                        f"{len(data)} satır yüklendi!\n\n"
-                        f"🆕 Aşağıdaki YENİ malzemeler varsayılan değerlerle veritabanına eklendi "
-                        f"(Fiyat: 0, Katı: 100%). Lütfen Malzemeler sekmesinde güncelleyin:\n\n" +
+                        t(TK.common_success if hasattr(TK, 'common_success') else TK.SUCCESS),
+                        f"{t(TK.MSG_LINES_LOADED).replace('{count}', str(len(data)))}\n\n"
+                        f"🆕 {t(TK.MSG_AUTO_ADD_MATERIALS)} "
+                        f"(0, 100%).\n\n" +
                         "\n".join(f"• {code}" for code in created_materials[:10]) +
                         (f"\n... ve {len(created_materials) - 10} diğer" if len(created_materials) > 10 else "")
                     )
                 else:
-                    messagebox.showinfo("Başarılı", f"{len(data)} satır yüklendi!")
+                    messagebox.showinfo(t(TK.common_success if hasattr(TK, 'common_success') else TK.SUCCESS), t(TK.MSG_LINES_LOADED).replace('{count}', str(len(data))))
             else:
-                messagebox.showwarning("Uyarı", "Geçerli veri bulunamadı!")
+                messagebox.showwarning(t(TK.common_warning if hasattr(TK, 'common_warning') else TK.WARNING), t(TK.MSG_NO_DATA_FOUND if hasattr(TK, 'MSG_NO_DATA_FOUND') else 'Geçerli veri bulunamadı!'))
                 
         except Exception as e:
-            messagebox.showerror("Hata", f"Excel okuma hatası:\n{e}")
+            messagebox.showerror(t(TK.common_error if hasattr(TK, 'common_error') else TK.ERROR), f"{t(TK.MSG_LOAD_ERROR)}:\n{e}")
     
     def _export_to_excel(self):
         """Export to Excel file"""
         file_path = filedialog.asksaveasfilename(
-            title="Excel'e Kaydet",
+            title=t(TK.FORM_EXPORT),
             defaultextension=".xlsx",
-            filetypes=[("Excel Dosyası", "*.xlsx")]
+            filetypes=[("Excel", "*.xlsx")]
         )
         
         if file_path:
@@ -698,7 +744,7 @@ class ModernFormulationEditor(ttk.LabelFrame):
         formulation_data = self.get_formulation_data()
         
         if not formulation_data.get('components'):
-            messagebox.showwarning("Uyarı", "Tahmin için en az bir hammadde gerekli!")
+            messagebox.showwarning(t(TK.common_warning if hasattr(TK, 'common_warning') else TK.WARNING), t(TK.MSG_MIN_ONE_COMPONENT_PREDICT))
             return
         
         try:
@@ -718,7 +764,7 @@ class ModernFormulationEditor(ttk.LabelFrame):
         if result and result.get('success'):
             predictions = result.get('predictions', {})
             
-            lines = ["🔮 TAHMİN SONUÇLARI", "─" * 40]
+            lines = [f"🔮 {t(TK.ML_FEATURE_IMPORTANCE)}", "─" * 40]
             
             for key, value in predictions.items():
                 if value is not None:

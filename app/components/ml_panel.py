@@ -9,11 +9,13 @@ from tkinter import ttk
 from typing import Callable, Optional
 import threading
 import logging
+from src.core.i18n import t, I18nMixin
+from src.core.translation_keys import TK
 
 logger = logging.getLogger(__name__)
 
 
-class MLRecommendationPanel(ttk.LabelFrame):
+class MLRecommendationPanel(ttk.LabelFrame, I18nMixin):
     """
     ML Öneri paneli
     
@@ -26,26 +28,45 @@ class MLRecommendationPanel(ttk.LabelFrame):
             parent: Üst widget
             on_get_recommendation: Öneri callback'i (mode) -> str
         """
-        super().__init__(parent, text="🤖 ML Öneri Sistemi", padding=10)
+        super().__init__(parent, padding=10)
         
         self.on_get_recommendation = on_get_recommendation
         self.is_processing = False
         
+        self.setup_i18n()
         self._create_widgets()
+        self._update_texts()
     
+    def _update_texts(self):
+        """Update texts for i18n"""
+        self.config(text=f"🤖 {t(TK.NAV_OPTIMIZATION)}") # Reusing optimization/compare key or specific ML title
+        self.mode_label.config(text=f"{t('common.mode' if hasattr(TK, 'COMMON_MODE') else 'Mod')}:")
+        self.recommend_btn.config(text=f"🔮 {t(TK.FORM_PREDICT)}")
+        self.results_label.config(text=f"{t('ml.suggestions' if hasattr(TK, 'ML_SUGGESTIONS') else 'Öneriler')}:")
+        self.copy_btn.config(text=t('common.copy' if hasattr(TK, 'COMMON_COPY') else 'Kopyala'))
+        self.clear_btn.config(text=t(TK.FORM_CLEAN))
+        
+        # Radio buttons
+        # Note: Radio button texts are tricky to update dynamically without keeping references
+        # For simplicity, we can recreate or skip if they don't change often, but better to fix
+        
+        if not self.is_processing:
+            self._set_status("ready")
+
     def _create_widgets(self):
         """Widget'ları oluştur"""
         # Mod seçimi
         mode_frame = ttk.Frame(self)
         mode_frame.pack(fill=tk.X, pady=(0, 10))
         
-        ttk.Label(mode_frame, text="Mod:").pack(side=tk.LEFT)
+        self.mode_label = ttk.Label(mode_frame)
+        self.mode_label.pack(side=tk.LEFT)
         
         self.mode_var = tk.StringVar(value="auto")
         modes = [
-            ("Otomatik", "auto"),
-            ("Lokal", "local"),
-            ("Online", "online")
+            (t('common.auto' if hasattr(TK, 'COMMON_AUTO') else "Otomatik"), "auto"),
+            (t('ml.local' if hasattr(TK, 'ML_LOCAL') else "Lokal"), "local"),
+            (t('status.online' if hasattr(TK, 'STATUS_ONLINE') else "Online"), "online")
         ]
         
         for text, value in modes:
@@ -78,7 +99,6 @@ class MLRecommendationPanel(ttk.LabelFrame):
         # Öneri butonu
         self.recommend_btn = ttk.Button(
             self,
-            text="🔮 ML Öneri Al",
             command=self._get_recommendation
         )
         self.recommend_btn.pack(fill=tk.X, pady=10)
@@ -87,7 +107,8 @@ class MLRecommendationPanel(ttk.LabelFrame):
         result_frame = ttk.Frame(self)
         result_frame.pack(fill=tk.BOTH, expand=True)
         
-        ttk.Label(result_frame, text="Öneriler:").pack(anchor=tk.W)
+        self.results_label = ttk.Label(result_frame)
+        self.results_label.pack(anchor=tk.W)
         
         # Text widget with scrollbar
         text_frame = ttk.Frame(result_frame)
@@ -124,17 +145,17 @@ class MLRecommendationPanel(ttk.LabelFrame):
         btn_frame = ttk.Frame(self)
         btn_frame.pack(fill=tk.X, pady=(10, 0))
         
-        ttk.Button(
+        self.copy_btn = ttk.Button(
             btn_frame,
-            text="📋 Kopyala",
             command=self._copy_result
-        ).pack(side=tk.LEFT, padx=2)
+        )
+        self.copy_btn.pack(side=tk.LEFT, padx=2)
         
-        ttk.Button(
+        self.clear_btn = ttk.Button(
             btn_frame,
-            text="🗑️ Temizle",
             command=self._clear_result
-        ).pack(side=tk.LEFT, padx=2)
+        )
+        self.clear_btn.pack(side=tk.LEFT, padx=2)
     
     def _get_recommendation(self):
         """ML önerisi al"""

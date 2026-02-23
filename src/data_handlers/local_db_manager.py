@@ -1331,6 +1331,7 @@ class LocalDBManager:
     # === DASHBOARD ===
     
     def get_dashboard_stats(self) -> Dict:
+        """Dashboard için istatistikleri getir (nötr anahtarlarla)"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT COUNT(*) as c FROM formulations')
@@ -1347,10 +1348,10 @@ class LocalDBManager:
             cursor.execute("SELECT COUNT(*) as c FROM formulations WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')")
             this_month = cursor.fetchone()['c']
             return {
-                'Toplam Formül': total,
-                'Bu Ay Eklenen': this_month,
-                'Test Bekleyen': max(0, total - tested),
-                'Başarılı': tested
+                'total_formulas': total,
+                'added_this_month': this_month,
+                'pending_tests': max(0, total - tested),
+                'successful_tests': tested
             }
 
     def get_monthly_formulation_counts(self) -> List[Dict]:
