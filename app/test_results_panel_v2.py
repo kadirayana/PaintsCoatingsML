@@ -681,7 +681,7 @@ class MLIntegrationPanel(tk.Frame, I18nMixin):
     def set_training_info(self, last_trained: str, sample_count: int):
         """Set last training info"""
         self._last_training_data = (last_trained, sample_count)
-        label_text = f"{t(TK.TEST_MESSAGES_LAST_TRAINING)} {last_trained} ({sample_count} {t(TK.common_all).lower()})"
+        label_text = f"{t(TK.TEST_MESSAGES_LAST_TRAINING)} {last_trained} ({sample_count} {t(getattr(TK, 'common_all', 'Tümü')).lower()})"
         self.training_label.configure(text=label_text)
     
     def set_comments(self, comments: List[str]):
