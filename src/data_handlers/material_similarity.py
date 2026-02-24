@@ -191,7 +191,7 @@ class MaterialSimilarityEngine:
         
         Ra² = 4(δD₁-δD₂)² + (δP₁-δP₂)² + (δH₁-δH₂)²
         
-        Materials are compatible if Ra < R₀ (interaction radius).
+        materials are compatible if Ra < R₀ (interaction radius).
         Typical R₀ values: 5-10 for good compatibility.
         
         Args:

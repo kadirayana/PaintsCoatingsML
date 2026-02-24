@@ -16,7 +16,7 @@ from typing import Optional, Callable, Dict, List
 import threading
 import logging
 
-from src.core.i18n import t, I18nMixin, I18n
+from src.core.i18n import t, I18nMixin, I18n, get_i18n
 from src.core.translation_keys import TK
 
 # Core architecture
@@ -27,7 +27,6 @@ from app.components.status_bar import StatusBar
 from app.components.project_panel import ProjectPanel
 from app.components.quick_actions import QuickActionsPanel
 from app.components.dashboard import DashboardPanel
-from app.components.ml_panel import MLRecommendationPanel
 from app.components.material_panel import MaterialManagementPanel
 from app.components.dialogs.project_dialog import ProjectDialog
 from app.components.dialogs.formulation_list_dialog import FormulationListDialog
@@ -295,7 +294,7 @@ class PaintFormulationApp(I18nMixin):
         self.dashboard = DashboardPanel(main_tab, self._on_dashboard_navigate)
         self.dashboard.pack(fill=tk.BOTH, expand=True)
 
-        # === SEKME 2: Malzemeler ===
+        # === SEKME 2: Hammaddeler / Raw materials ===
         material_tab = ttk.Frame(self.notebook, padding=10)
         self.notebook.add(material_tab, text=t(TK.NAV_MATERIALS))
         
@@ -462,13 +461,13 @@ class PaintFormulationApp(I18nMixin):
             self.status_bar.set_status("✅ Özel test metodları güncellendi")
     
     def _on_material_list_change(self):
-        """Malzeme listesi değiştiğinde formülasyon editörünü güncelle"""
+        """hammadde listesi değiştiğinde formülasyon editörünü güncelle"""
         if hasattr(self, 'formulation_editor'):
-            # Malzeme listesini yeniden yükle
+            # hammadde listesini yeniden yükle
             materials = self.db_manager.get_all_materials()
             if hasattr(self.formulation_editor, 'refresh_materials'):
                 self.formulation_editor.refresh_materials()
-            self.status_bar.set_status("✅ Malzeme listesi güncellendi")
+            self.status_bar.set_status("✅ hammadde listesi güncellendi")
     
     def _on_create_material_from_import(self, code: str, name: str = None) -> bool:
         """
@@ -1008,23 +1007,23 @@ class PaintFormulationApp(I18nMixin):
         return result
     
     def _on_save_material(self, data: dict) -> int:
-        """Malzeme kaydetme olayı"""
+        """hammadde kaydetme olayı"""
         try:
             material_id = self.db_manager.add_material(data)
-            self.status_bar.set_status(f"Malzeme eklendi: {data['name']}")
+            self.status_bar.set_status(f"hammadde eklendi: {data['name']}")
             return material_id
         except Exception as e:
-            self.status_bar.set_status(f"Malzeme ekleme hatası: {str(e)}")
+            self.status_bar.set_status(f"hammadde ekleme hatası: {str(e)}")
             return 0
     
     def _on_delete_material(self):
-        """Malzeme silme olayı"""
-        self.status_bar.set_status("Malzeme silindi")
+        """hammadde silme olayı"""
+        self.status_bar.set_status("hammadde silindi")
     
     def _on_material_list_change(self):
-        """Malzeme listesi değiştiğinde çağrılır"""
-        self.status_bar.set_status("Malzeme verileri güncellendi")
-        # Malzeme cache'ini temizle
+        """hammadde listesi değiştiğinde çağrılır"""
+        self.status_bar.set_status("hammadde verileri güncellendi")
+        # hammadde cache'ini temizle
         if hasattr(self.db_manager, '_material_cache'):
             self.db_manager._material_cache = {}
             self.db_manager._material_cache_valid = False
@@ -1332,7 +1331,7 @@ class PaintFormulationApp(I18nMixin):
             except Exception as e:
                 logger.error(f"Proje kısıtları uygulanamadı: {e}")
 
-        # Malzeme fiyatlarını al
+        # hammadde fiyatlarını al
         material_costs = self.material_panel.get_price_dict() if hasattr(self, 'material_panel') else {}
         
         # Optimizasyonu çalıştır (MLOptimizer.optimize kullanmalıyız, learner değil)

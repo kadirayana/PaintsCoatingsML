@@ -202,7 +202,7 @@ class EnhancedRecipeTransformer:
         
         # Log any missing materials
         if missing_materials:
-            logger.warning(f"Materials not found in database: {missing_materials}")
+            logger.warning(f"materials not found in database: {missing_materials}")
         
         # Compute metadata
         metadata = self._compute_metadata(category_weights, total_weight, recipe)

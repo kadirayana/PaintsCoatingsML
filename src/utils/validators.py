@@ -10,24 +10,24 @@ from typing import Tuple, Optional, Any
 
 def validate_material_code(code: str) -> Tuple[bool, str]:
     """
-    Malzeme kodu validasyonu
+    hammadde kodu validasyonu
     
     Args:
-        code: Kontrol edilecek malzeme kodu
+        code: Kontrol edilecek hammadde kodu
         
     Returns:
         (geçerli_mi, hata_mesajı) tuple'ı
     """
     if not code:
-        return False, "Malzeme kodu boş olamaz"
+        return False, "hammadde kodu boş olamaz"
     
     code = code.strip()
     
     if len(code) > 50:
-        return False, "Malzeme kodu 50 karakteri geçemez"
+        return False, "hammadde kodu 50 karakteri geçemez"
     
     if not re.match(r'^[A-Za-z0-9\-_\.]+$', code):
-        return False, "Malzeme kodu sadece harf, rakam, -, _ ve . içerebilir"
+        return False, "hammadde kodu sadece harf, rakam, -, _ ve . içerebilir"
     
     return True, ""
 

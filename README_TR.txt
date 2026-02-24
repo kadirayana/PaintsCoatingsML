@@ -7,7 +7,7 @@
 HAKKINDA
 --------
 Paint Formulation AI, boya formülasyonlarınızı yönetmenizi, analiz etmenizi ve
-yapay zeka destekli öneriler almanızı sağlayan bir masaüstü uygulamasıdır.
+Makine öğrenmesi destekli öneriler almanızı sağlayan bir masaüstü uygulamasıdır.
 
 Uygulama, internet bağlantısı olmadan da tam fonksiyonel çalışabilir (Hibrit Mod).
 

@@ -370,7 +370,8 @@ class PassiveMLPanel(ttk.Frame):
         """Draw placeholder chart"""
         self.chart_canvas.delete("all")
         
-        width = self.chart_canvas.winfo_width() or 400
+        self.chart_canvas.update_idletasks()
+        width = max(self.chart_canvas.winfo_width(), 400)
         height = 200
         
         # Empty state message

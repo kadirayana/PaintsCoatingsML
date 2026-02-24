@@ -6,7 +6,7 @@ Tüm projelerden öğrenen ve bilgi sentezi yapan model
 Özellikler:
 - Federated learning yaklaşımı
 - Transfer learning ile projelere aktarım
-- Malzeme-performans pattern analizi
+- hammadde-performans pattern analizi
 """
 
 import os
@@ -26,7 +26,7 @@ class GlobalLearner:
     Global (Federated) Öğrenme Modeli
     
     Tüm projelerden edinilen bilgiyi birleştirir ve genel kalıplar çıkarır:
-    - Malzeme-performans ilişkileri
+    - hammadde-performans ilişkileri
     - Maliyet-kalite trade-off'ları
     - Optimum formülasyon kuralları
     """

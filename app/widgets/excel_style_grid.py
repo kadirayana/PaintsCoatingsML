@@ -162,7 +162,7 @@ class MaterialAutocompleteCell(ttk.Combobox):
         return 'break'
     
     def _on_selected(self, event=None):
-        self.event_generate('<<MaterialSelected>>')
+        self.event_generate('<<materialselected>>')
     
     def _on_key_release(self, event=None):
         """Filter dropdown on typing"""
@@ -279,7 +279,7 @@ class ExcelStyleGrid(ttk.Frame):
         
         self.edit_combo.bind('<<CellEditConfirm>>', self._on_edit_confirm)
         self.edit_combo.bind('<<CellEditTab>>', self._on_edit_tab)
-        self.edit_combo.bind('<<MaterialSelected>>', self._on_material_selected)
+        self.edit_combo.bind('<<materialselected>>', self._on_material_selected)
     
     def _on_double_click(self, event):
         """Handle double-click for editing"""

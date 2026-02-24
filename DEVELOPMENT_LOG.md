@@ -18,7 +18,7 @@ Uygulamanın ML (Makine Öğrenimi) bileşenlerinin kapsamlı incelenmesi ve mev
 | `project_learner.py` | 340 | 12.7 KB | Proje bazlı ML öğrenici |
 | `global_learner.py` | 366 | 14.6 KB | Global (Federated) öğrenme |
 | `continuous_learner.py` | 570 | 22.7 KB | Sürekli öğrenen ana motor |
-| `material_recommender.py` | 581 | 23.5 KB | Akıllı malzeme öneri sistemi |
+| `material_recommender.py` | 581 | 23.5 KB | Akıllı hammadde öneri sistemi |
 | `local_models.py` | 399 | 14.1 KB | Scikit-learn offline modeller |
 | `router.py` | 264 | 10.7 KB | Hibrit ML yönlendirici |
 | `api_client.py` | - | 9.1 KB | Online API istemcisi |
@@ -68,7 +68,7 @@ Uygulamanın ML (Makine Öğrenimi) bileşenlerinin kapsamlı incelenmesi ve mev
 **Özellikler:**
 - ✅ Federated learning yaklaşımı
 - ✅ Transfer learning ile projelere aktarım
-- ✅ Malzeme-performans pattern analizi
+- ✅ hammadde-performans pattern analizi
 
 **Ana Metodlar:**
 ```
@@ -127,13 +127,13 @@ Uygulamanın ML (Makine Öğrenimi) bileşenlerinin kapsamlı incelenmesi ve mev
 
 ---
 
-### 4️⃣ MaterialRecommender (Akıllı Malzeme Öneri)
+### 4️⃣ MaterialRecommender (Akıllı hammadde Öneri)
 **Dosya:** `src/ml_engine/material_recommender.py`
 
 **Amaç:** Kimya mühendisi gibi düşünen materyal öneri motoru
 
 **Özellikler:**
-- ✅ Alternatif malzeme önerisi
+- ✅ Alternatif hammadde önerisi
 - ✅ Maliyet-performans trade-off analizi
 - ✅ Kimyasal uyumluluk kontrolü
 - ✅ Formülasyon iyileştirme önerileri
@@ -165,14 +165,14 @@ class FormulationSuggestion:
 ├── __init__(knowledge_path, models_dir)        # Başlat
 ├── _load_chemical_knowledge()                  # Kimya bilgisi yükle
 ├── _get_default_knowledge()                    # Varsayılan bilgi tabanı
-├── recommend_alternatives()                    # Alternatif malzeme öner
+├── recommend_alternatives()                    # Alternatif hammadde öner
 ├── _calculate_substitution_confidence()        # İkame güven skoru
 ├── _generate_reason()                          # Öneri nedeni oluştur
 ├── _generate_chemistry_note()                  # Kimya notu oluştur
 ├── suggest_formulation_improvements()          # Formülasyon iyileştir
 ├── find_similar_formulations()                 # Benzer formülasyonları bul
 ├── save_knowledge()                            # Bilgi tabanını kaydet
-└── add_material_knowledge()                    # Yeni malzeme bilgisi ekle
+└── add_material_knowledge()                    # Yeni hammadde bilgisi ekle
 ```
 
 **Bilgi Kaynağı:** `data_storage/chemical_knowledge.json`
@@ -263,7 +263,7 @@ class FormulationSuggestion:
 - Proje seçimi ve proje bazlı eğitim
 - Global model eğitimi
 - İçgörü (insights) görüntüleme
-- Alternatif malzeme önerileri
+- Alternatif hammadde önerileri
 - İyileştirme önerileri
 
 ---
@@ -274,7 +274,7 @@ class FormulationSuggestion:
 - [x] Proje bazlı model yönetimi
 - [x] Global öğrenme sistemi
 - [x] Sürekli öğrenme mekanizması
-- [x] Malzeme öneri motoru
+- [x] hammadde öneri motoru
 - [x] Kimyasal bilgi tabanı
 - [x] Hibrit online/offline çalışma
 - [x] UI entegrasyonu
@@ -387,8 +387,8 @@ Mevcut [Ara Özellik -> Performans] yapısı yerine, endüstride kullanılan [Re
 ### 📝 Yeni Dönüşüm Planı
 
 #### Faz 1: Veri Dönüşümü ve Hazırlık ✅ TAMAMLANDI
-- [x] Veritabanından reçete (malzeme + oran) çekmek için SQL güncellemesi
-- [x] Malzemeleri kategorize etme (Binder, Solvent, Pigment, Additive)
+- [x] Veritabanından reçete (hammadde + oran) çekmek için SQL güncellemesi
+- [x] hammaddeleri kategorize etme (Binder, Solvent, Pigment, Additive)
 - [x] Reçeteyi 'Özellik Vektörü'ne dönüştüren `RecipeTransformer` sınıfı
 
 #### Faz 2: Forward Model (Tahmin Motoru: Reçete -> Sonuç) ✅ TAMAMLANDI
@@ -475,18 +475,18 @@ if hasattr(self, 'optimization_panel') and hasattr(self.optimization_panel, 'loa
   - `idx_formulations_status` - Durum filtreleme için
   - `idx_components_formulation` - Bileşen sorguları için
   - `idx_trials_formulation` - Deneme sorguları için
-  - `idx_materials_category` - Malzeme kategori sorguları için
+  - `idx_raw materials_category` - hammadde kategori sorguları için
 
-#### 2. Malzeme Önbelleği (Caching)
+#### 2. hammadde Önbelleği (Caching)
 - `LocalDBManager`'a LRU cache mekanizması eklendi
 - `get_material_by_code()` ve `get_material_by_name()` metodları cached
-- `prefetch_materials()` ile toplu önbellek yükleme
+- `prefetch_raw materials()` ile toplu önbellek yükleme
 - `_invalidate_cache()` ile cache temizleme
 
 #### 3. Input Validation Utility
 - Yeni dosya: `src/utils/validators.py`
 - Fonksiyonlar:
-  - `validate_material_code()` - Malzeme kodu doğrulama
+  - `validate_material_code()` - hammadde kodu doğrulama
   - `validate_percentage()` - Yüzde değer doğrulama
   - `validate_positive_number()` - Pozitif sayı doğrulama
   - `validate_project_name()` - Proje adı doğrulama

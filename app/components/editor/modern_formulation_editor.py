@@ -488,8 +488,8 @@ class ModernFormulationEditor(ttk.LabelFrame, I18nMixin):
             
             # === HEADERS (4 columns) ===
             headers = [
-                ('A1', 'Raw Material Code', 'Veritabanındaki malzeme kodunu giriniz.\nÖrnek: EP01, TIO2, SOLV-001'),
-                ('B1', 'Material Name', 'İsteğe bağlı. Eğer kod yeni ise, bu isim malzemeyi oluşturmak için kullanılacaktır.\n\nOptional. If the code is new, this name will be used to create it.'),
+                ('A1', 'Raw Material Code', 'Veritabanındaki hammadde kodunu giriniz.\nÖrnek: EP01, TIO2, SOLV-001'),
+                ('B1', 'Material Name', 'İsteğe bağlı. Eğer kod yeni ise, bu isim hammaddeyi oluşturmak için kullanılacaktır.\n\nOptional. If the code is new, this name will be used to create it.'),
                 ('C1', 'Quantity (kg)', 'Kilogram cinsinden miktar giriniz.'),
                 ('D1', 'Notes', 'İsteğe bağlı notlar.')
             ]
@@ -598,9 +598,9 @@ class ModernFormulationEditor(ttk.LabelFrame, I18nMixin):
                 col_lower = str(col).lower().strip()
                 
                 # New 4-column format
-                if col_lower in ['raw material code', 'hammadde kodu', 'material code', 'code', 'kod']:
+                if col_lower in ['material code', 'hammadde kodu', 'material code', 'code', 'kod']:
                     col_map[col] = 'material_code'
-                elif col_lower in ['material name', 'malzeme adı', 'malzeme ismi', 'name', 'ad', 'isim']:
+                elif col_lower in ['material name', 'hammadde adı', 'hammadde ismi', 'name', 'ad', 'isim']:
                     col_map[col] = 'material_name'
                 elif col_lower in ['quantity (kg)', 'quantity', 'ağırlık (kg)', 'ağırlık', 'miktar (kg)', 'miktar', 'weight', 'amount', 'qty']:
                     col_map[col] = 'quantity'

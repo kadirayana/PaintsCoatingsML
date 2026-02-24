@@ -21,7 +21,7 @@ class DashboardPanel(ttk.LabelFrame, I18nMixin):
     """
     
     # Kart -> Sekme eşlemesi (0-indexed)
-    # Tab order: 0=Dashboard, 1=Malzemeler, 2=Formülasyon, 3=Test Sonuçları, 4=ML Merkezi, 5=Karşılaştırma
+    # Tab order: 0=Dashboard, 1=Hammaddeler, 2=Formülasyon, 3=Test Sonuçları, 4=ML Merkezi, 5=Karşılaştırma
     CARD_TAB_MAPPING = {
         "Toplam Formül": 2,      # Still using hardcoded string from DB? No, DB returns language-neutral.
         "total_formulas": 2,

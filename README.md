@@ -41,7 +41,7 @@ Built with Python and Tkinter, this tool helps reduce development cycles by inte
 
 | **Dashboard** | **Material Management** |
 |:---:|:---:|
-| <img src="screenshot_dashboard.png" width="800"> | <img src="screenshot_materials.png" width="800"> |
+| <img src="screenshot_dashboard.png" width="800"> | <img src="screenshot_raw materials.png" width="800"> |
 
 | **Formulation Editor** | **Test Results & Training** |
 |:---:|:---:|
@@ -90,8 +90,8 @@ Python ve Tkinter kullanılarak geliştirilen bu araç, fiziksel testlerden önc
 |---------|-------------|
 | 📊 **Akıllı Kontrol Paneli** | Ar-Ge metriklerinin ve istatistiklerinin gerçek zamanlı takibi |
 | 🧪 **Formülasyon Editörü** | Gerçek zamanlı maliyet ve katı madde hesaplamalı Excel tarzı tablo |
-| 🤖 **ML Tahminleri** | Kalite, viskozite ve parlaklık gibi değerler için yapay zeka desteği |
-| 💰 **Maliyet Analizi** | Malzeme fiyatlarına göre otomatik toplam maliyet hesaplaması |
+| 🤖 **ML Tahminleri** | Kalite, viskozite ve parlaklık gibi değerler için Makine öğrenmesi desteği |
+| 💰 **Maliyet Analizi** | hammadde fiyatlarına göre otomatik toplam maliyet hesaplaması |
 | 📁 **Proje Yönetimi** | Hiyerarşik organizasyon: Projeler → Konseptler → Denemeler |
 | 📈 **Varyasyon Karşılaştırması** | Formülasyon varyasyonlarının yan yana karşılaştırılması ve analizi |
 
@@ -99,15 +99,15 @@ Python ve Tkinter kullanılarak geliştirilen bu araç, fiziksel testlerden önc
 
 <div align="center">
 
-| **Kontrol Paneli (Dashboard)** | **Malzeme Yönetimi** |
+| **Kontrol Paneli (Dashboard)** | **Hammadde Yönetimi** |
 |:---:|:---:|
-| <img src="screenshot_dashboard.png" width="800"> | <img src="screenshot_materials.png" width="800"> |
+| <img src="screenshot_dashboard.png" width="800"> | <img src="screenshot_raw materials.png" width="800"> |
 
 | **Formülasyon Editörü** | **Test Sonuçları ve Eğitim** |
 |:---:|:---:|
 | <img src="screenshot_formulations.png" width="800"> | <img src="screenshot_test_results.png" width="800"> |
 
-| **ML Merkezi (Yapay Zeka)** | **Optimizasyon ve Karşılaştırma** |
+| **ML Merkezi (Makine Öğrenmesi)** | **Optimizasyon ve Karşılaştırma** |
 |:---:|:---:|
 | <img src="screenshot_ml_center.png" width="800"> | <img src="screenshot_optimization.png" width="800"> |
 

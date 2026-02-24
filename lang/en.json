@@ -46,7 +46,7 @@
         "new_project": "➕ New Project",
         "dashboard": "📊 Dashboard",
         "formulations": "📋 Formulations",
-        "materials": "📦 Materials",
+        "materials": "📦 Raw Materials",
         "test_results": "🧪 Test Results",
         "optimization": "⚖️ Comparison",
         "ml_center": "🧠 ML Center"
@@ -110,7 +110,7 @@
         "quantity": "Quantity"
     },
     "material_view": {
-        "title": "⚗️ Material Details",
+        "title": "⚗️ Raw Material Details",
         "search": "🔍 Search",
         "category": "Category:",
         "basic_info": "📋 Basic Information",
@@ -120,7 +120,7 @@
         "pigment_properties": "🎨 Pigment/Filler Properties",
         "solvent_properties": "💧 Solvent Properties",
         "cost": "💰 Cost",
-        "name": "Material Name:",
+        "name": "Raw Material Name:",
         "code": "Code:",
         "density": "Density (g/cm³):",
         "solid_content": "Solid Content (%):",
@@ -215,7 +215,7 @@
             "are_you_sure": "Are you sure?"
         },
         "info": {
-            "auto_add_materials": "New material codes will be automatically added to the database."
+            "auto_add_raw materials": "New material codes will be automatically added to the database."
         }
     },
     "params": {
@@ -235,8 +235,8 @@
     },
     "grid": {
         "row": "#",
-        "code": "Material Code",
-        "name": "Material Name",
+        "code": "Raw Material Code",
+        "name": "Raw Material Name",
         "weight": "Weight (kg)",
         "solid_pct": "Solid %",
         "solid_weight": "Solid Mass (kg)",

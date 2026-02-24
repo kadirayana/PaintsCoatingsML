@@ -359,7 +359,7 @@ class ContinuousLearner:
                  'total_cost': {'target': 100, 'weight': 0.6, 'direction': 'min'}}
             constraints: Parametre sınırları
                 {'viscosity': {'min': 1000, 'max': 5000}}
-            material_costs: Malzeme fiyatları
+            material_costs: hammadde fiyatları
             
         Returns:
             Optimum parametreler
@@ -518,7 +518,7 @@ class ContinuousLearner:
             density_factor = params.get('density', 1.1) / 1.1
             total += material_costs['filler'] * density_factor
         
-        # Genel malzeme maliyetleri
+        # Genel hammadde maliyetleri
         for material, cost in material_costs.items():
             if material not in ['thickener', 'filler']:
                 total += cost

@@ -118,8 +118,8 @@ class SmartTemplateGenerator:
     
     # Template columns
     COLUMNS = [
-        ('material_code', 'Malzeme Kodu', 'Zorunlu'),
-        ('material_name', 'Malzeme Adı', 'Opsiyonel'),
+        ('material_code', 'hammadde Kodu', 'Zorunlu'),
+        ('material_name', 'hammadde Adı', 'Opsiyonel'),
         ('quantity', 'Miktar (kg)', 'Zorunlu'),
         ('percentage', 'Yüzde (%)', 'Opsiyonel'),
         ('category', 'Kategori', 'Opsiyonel'),
@@ -263,13 +263,13 @@ class SmartTemplateGenerator:
         instructions = [
             "FORMÜLASYON ŞABLONU KULLANIM KILAVUZU",
             "",
-            "1. 'Formulation_Data' sayfasına malzemelerinizi girin",
+            "1. 'Formulation_Data' sayfasına hammaddelerinizi girin",
             "2. Zorunlu alanlar (*) doldurulmalıdır:",
-            "   - Malzeme Kodu: Benzersiz malzeme tanımlayıcısı",
+            "   - hammadde Kodu: Benzersiz hammadde tanımlayıcısı",
             "   - Miktar: kg cinsinden miktar",
             "",
             "3. Opsiyonel alanlar:",
-            "   - Malzeme Adı: Otomatik tanınmayan malzemeler için",
+            "   - hammadde Adı: Otomatik tanınmayan hammaddeler için",
             "   - Yüzde: Otomatik hesaplanır (boş bırakılabilir)",
             "   - Kategori: binder, pigment, solvent, additive",
             "",
@@ -457,7 +457,7 @@ class IntelligentImportHandler:
             if not formula_name:
                 formula_name = os.path.splitext(os.path.basename(file_path))[0]
             
-            log_progress("🔍 Malzemeler doğrulanıyor...")
+            log_progress("🔍 hammaddeler doğrulanıyor...")
             
             # ================================================================
             # START TRANSACTION
@@ -500,7 +500,7 @@ class IntelligentImportHandler:
                     if not components_data:
                         raise ValueError("Geçerli bileşen bulunamadı")
                     
-                    log_progress(f"✅ {len(components_data)} malzeme doğrulandı")
+                    log_progress(f"✅ {len(components_data)} hammadde doğrulandı")
                     
                     # Step B: Create formulation header
                     log_progress("📝 Formülasyon kaydı oluşturuluyor...")
@@ -582,8 +582,8 @@ class IntelligentImportHandler:
         column_map = {}
         
         mappings = {
-            'material_code': ['malzeme kodu', 'code', 'kod', 'material code', 'material_code'],
-            'material_name': ['malzeme adı', 'malzeme adi', 'name', 'ad', 'material name'],
+            'material_code': ['hammadde kodu', 'code', 'kod', 'material code', 'material_code'],
+            'material_name': ['hammadde adı', 'hammadde adi', 'name', 'ad', 'material name'],
             'quantity': ['miktar', 'amount', 'qty', 'quantity'],
             'percentage': ['yüzde', 'yuzde', '%', 'percentage', 'oran'],
             'category': ['kategori', 'category', 'type', 'tip'],

@@ -1,7 +1,7 @@
 """
 Paint Formulation AI - Optimizasyon Panelleri
 ==============================================
-Çoklu hedef optimizasyonu ve malzeme yönetimi UI bileşenleri
+Çoklu hedef optimizasyonu ve hammadde yönetimi UI bileşenleri
 """
 
 import tkinter as tk
@@ -10,8 +10,8 @@ from typing import Callable, Dict, List, Optional
 import threading
 
 
-class MaterialsPanel(ttk.LabelFrame):
-    """Malzeme yönetim paneli - Kimyasal özellikler dahil"""
+class materialsPanel(ttk.LabelFrame):
+    """hammadde yönetim paneli - Kimyasal özellikler dahil"""
     
     CATEGORIES = [
         ('binder', 'Bağlayıcı'),
@@ -42,14 +42,14 @@ class MaterialsPanel(ttk.LabelFrame):
     }
     
     def __init__(self, parent, on_save: Callable = None, on_delete: Callable = None):
-        super().__init__(parent, text="💰 Malzeme Fiyatları", padding=10)
+        super().__init__(parent, text="💰 hammadde Fiyatları", padding=10)
         
         self.on_save = on_save
         self.on_delete = on_delete
         self.materials = []
         self.property_entries = {}
         
-        # Malzeme listesi
+        # hammadde listesi
         list_frame = ttk.Frame(self)
         list_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         
@@ -57,7 +57,7 @@ class MaterialsPanel(ttk.LabelFrame):
         columns = ('name', 'category', 'price', 'unit')
         self.tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=8)
         
-        self.tree.heading('name', text='Malzeme Adı')
+        self.tree.heading('name', text='hammadde Adı')
         self.tree.heading('category', text='Kategori')
         self.tree.heading('price', text='Fiyat/Birim')
         self.tree.heading('unit', text='Birim')
@@ -203,7 +203,7 @@ class MaterialsPanel(ttk.LabelFrame):
         return values
     
     def _add_material(self):
-        """Malzeme ekle"""
+        """hammadde ekle"""
         name = self.name_entry.get().strip()
         price = self.price_entry.get().strip()
         
@@ -251,12 +251,12 @@ class MaterialsPanel(ttk.LabelFrame):
             entry.delete(0, tk.END)
     
     def _delete_material(self):
-        """Seçili malzemeyi sil"""
+        """Seçili hammaddeyi sil"""
         selection = self.tree.selection()
         if not selection:
             return
         
-        if messagebox.askyesno("Onay", "Malzemeyi silmek istiyor musunuz?"):
+        if messagebox.askyesno("Onay", "hammaddeyi silmek istiyor musunuz?"):
             for item in selection:
                 self.tree.delete(item)
             
@@ -266,7 +266,7 @@ class MaterialsPanel(ttk.LabelFrame):
             self._update_total()
     
     def _update_material(self):
-        """Seçili malzemeyi güncelle"""
+        """Seçili hammaddeyi güncelle"""
         selection = self.tree.selection()
         if not selection:
             return
@@ -300,7 +300,7 @@ class MaterialsPanel(ttk.LabelFrame):
         self.total_label.config(text=f"Toplam: {total:.2f} birim")
     
     def load_materials(self, materials: List[Dict]):
-        """Malzemeleri yükle"""
+        """hammaddeleri yükle"""
         self.tree.delete(*self.tree.get_children())
         
         for m in materials:
@@ -1190,7 +1190,7 @@ class MultiObjectiveOptimizationPanel(ttk.LabelFrame):
         # Açıklama
         ttk.Label(
             top_frame,
-            text="İstenen özellikleri girin, yapay zeka en uygun reçeteyi bulsun.",
+            text="İstenen özellikleri girin, Makine öğrenmesi en uygun reçeteyi bulsun.",
             font=('Helvetica', 9, 'italic'),
             wraplength=400
         ).pack(anchor=tk.W, pady=(0, 5))

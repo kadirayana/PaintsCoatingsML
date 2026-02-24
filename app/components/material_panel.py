@@ -1,10 +1,10 @@
 """
 Paint Formulation AI - Material Management Panel
 =================================================
-Malzeme yönetimi ve kimyasal özellik düzenleme paneli.
+hammadde yönetimi ve kimyasal özellik düzenleme paneli.
 
 Özellikler:
-- Malzeme listesi görüntüleme ve filtreleme
+- hammadde listesi görüntüleme ve filtreleme
 - pH, limit değerleri düzenleme
 - Bulk import/export
 """
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 class MaterialManagementPanel(ttk.Frame, I18nMixin):
     """
-    Malzeme Yönetim Paneli
+    hammadde Yönetim Paneli
     
     Kimyasal özellikleri (pH, limitler) düzenleme arayüzü sağlar.
     Dynamic form fields based on selected category.
@@ -75,7 +75,7 @@ class MaterialManagementPanel(ttk.Frame, I18nMixin):
         Args:
             parent: Üst widget
             db_manager: LocalDBManager instance
-            on_material_change: Malzeme değişikliği callback'i
+            on_material_change: hammadde değişikliği callback'i
         """
         super().__init__(parent)
         
@@ -101,7 +101,7 @@ class MaterialManagementPanel(ttk.Frame, I18nMixin):
         main_paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         main_paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # === Sol Panel - Malzeme Listesi ===
+        # === Sol Panel - hammadde Listesi ===
         self.left_frame = ttk.LabelFrame(main_paned, padding=5)
         main_paned.add(self.left_frame, weight=1)
         
@@ -122,7 +122,7 @@ class MaterialManagementPanel(ttk.Frame, I18nMixin):
         self.category_combo.pack(side=tk.LEFT, padx=5)
         self.category_combo.bind('<<ComboboxSelected>>', lambda e: self._filter_materials())
         
-        # Malzeme listesi
+        # hammadde listesi
         list_frame = ttk.Frame(self.left_frame)
         list_frame.pack(fill=tk.BOTH, expand=True)
         
@@ -149,7 +149,7 @@ class MaterialManagementPanel(ttk.Frame, I18nMixin):
         self.import_btn = ttk.Button(btn_frame, command=self._import_materials, width=10)
         self.import_btn.pack(side=tk.LEFT, padx=2)
         
-        # === Sağ Panel - Malzeme Detayları ===
+        # === Sağ Panel - hammadde Detayları ===
         self.right_frame = ttk.LabelFrame(main_paned, padding=10)
         main_paned.add(self.right_frame, weight=2)
         
@@ -176,7 +176,7 @@ class MaterialManagementPanel(ttk.Frame, I18nMixin):
         
         # Temel bilgiler
         self._add_section("basic", "📋 Temel Bilgiler")
-        self._add_entry("name", "Malzeme Adı *", width=30)
+        self._add_entry("name", "hammadde Adı *", width=30)
         self._add_combo("category", "Kategori *", self.CATEGORIES, width=15)
         self._add_entry("code", "Kod", width=15)
         
@@ -419,7 +419,7 @@ class MaterialManagementPanel(ttk.Frame, I18nMixin):
                         self.field_frames[field_name].pack(fill=tk.X, pady=2)
     
     def _load_materials(self):
-        """Malzemeleri veritabanından yükle"""
+        """hammaddeleri veritabanından yükle"""
         try:
             with self.db_manager.get_connection() as conn:
                 cursor = conn.cursor()
@@ -457,14 +457,14 @@ class MaterialManagementPanel(ttk.Frame, I18nMixin):
                     })
             
             self._filter_materials()
-            logger.info(f"{len(self.materials)} malzeme yüklendi")
+            logger.info(f"{len(self.materials)} hammadde yüklendi")
             
         except Exception as e:
-            logger.error(f"Malzeme yükleme hatası: {e}")
-            messagebox.showerror("Hata", f"Malzemeler yüklenemedi: {e}")
+            logger.error(f"hammadde yükleme hatası: {e}")
+            messagebox.showerror("Hata", f"hammaddeler yüklenemedi: {e}")
     
     def _filter_materials(self):
-        """Malzemeleri filtrele ve listeyi güncelle"""
+        """hammaddeleri filtrele ve listeyi güncelle"""
         # Mevcut öğeleri temizle
         for item in self.material_tree.get_children():
             self.material_tree.delete(item)
@@ -486,7 +486,7 @@ class MaterialManagementPanel(ttk.Frame, I18nMixin):
                                        values=(mat['name'], mat['category'] or '', price))
     
     def _on_material_select(self, event):
-        """Malzeme seçildiğinde"""
+        """hammadde seçildiğinde"""
         selection = self.material_tree.selection()
         if not selection:
             return
@@ -494,7 +494,7 @@ class MaterialManagementPanel(ttk.Frame, I18nMixin):
         material_id = int(selection[0])
         self.current_material_id = material_id
         
-        # Malzeme verilerini bul
+        # hammadde verilerini bul
         material = next((m for m in self.materials if m['id'] == material_id), None)
         if not material:
             return
@@ -510,10 +510,10 @@ class MaterialManagementPanel(ttk.Frame, I18nMixin):
             self._update_form_fields(category)
     
     def _save_material(self):
-        """Malzemeyi kaydet"""
+        """hammaddeyi kaydet"""
         name = self.entries['name'].get().strip()
         if not name:
-            messagebox.showwarning("Uyarı", "Malzeme adı zorunludur.")
+            messagebox.showwarning("Uyarı", "hammadde adı zorunludur.")
             return
         
         category = self.entries['category'].get()
@@ -574,13 +574,13 @@ class MaterialManagementPanel(ttk.Frame, I18nMixin):
                 self.on_material_change()
             
         except Exception as e:
-            logger.error(f"Malzeme kaydetme hatası: {e}")
+            logger.error(f"hammadde kaydetme hatası: {e}")
             messagebox.showerror("Hata", f"Kaydetme başarısız: {e}")
     
     def _delete_material(self):
-        """Malzemeyi sil"""
+        """hammaddeyi sil"""
         if not self.current_material_id:
-            messagebox.showwarning("Uyarı", "Silinecek malzeme seçilmedi.")
+            messagebox.showwarning("Uyarı", "Silinecek hammadde seçilmedi.")
             return
         
         name = self.entries['name'].get()
@@ -602,87 +602,13 @@ class MaterialManagementPanel(ttk.Frame, I18nMixin):
                 self.on_material_change()
             
         except Exception as e:
-            logger.error(f"Malzeme silme hatası: {e}")
+            logger.error(f"hammadde silme hatası: {e}")
             messagebox.showerror("Hata", f"Silme başarısız: {e}")
     
     def _new_material(self):
-        """Yeni malzeme formu"""
+        """Yeni hammadde formu"""
         self._clear_form()
         self.current_material_id = None
-    
-    def _update_texts(self):
-        """Update texts for i18n"""
-        # Search label
-        if hasattr(self, 'search_label'):
-            self.search_label.config(text=t(TK.MAT_SEARCH))
-        
-        # Category filter labels
-        if hasattr(self, 'cat_label'):
-            self.cat_label.config(text=t(TK.MAT_CATEGORY))
-        
-        # All filter
-        if hasattr(self, 'category_listbox'):
-            # This is harder as it's a listbox, but we can update static labels
-            pass
-
-        # Treeview headers
-        if hasattr(self, 'tree'):
-            self.tree.heading("name", text=t(TK.MAT_NAME))
-            self.tree.heading("code", text=t(TK.MAT_CODE))
-            self.tree.heading("category", text=t(TK.MAT_CATEGORY))
-            self.tree.heading("density", text=t(TK.MAT_DENSITY))
-            self.tree.heading("solid", text=t(TK.MAT_SOLID_CONTENT))
-            self.tree.heading("price", text=t(TK.MAT_COST))
-
-        # Detail Panel Headers
-        for key, widget in self.section_header_labels.items():
-            # key is section identifier like 'basic', 'physical'
-            # Map section name to TK key
-            section_map = {
-                'basic': TK.MAT_BASIC_INFO,
-                'physical': TK.MAT_PHYSICAL_PROP,
-                'chemical': TK.MAT_CHEMICAL_PROP,
-                'limits': TK.MAT_LIMITS,
-                'pigment': TK.MAT_PIGMENT_PROP,
-                'solvent': TK.MAT_SOLVENT_PROP,
-                'cost': TK.MAT_COST
-            }
-            if key in section_map:
-                widget.config(text=t(section_map[key]))
-
-        # Field Labels
-        field_map = {
-            'name': TK.MAT_NAME,
-            'code': TK.MAT_CODE,
-            'category': TK.MAT_CATEGORY,
-            'density': TK.MAT_DENSITY,
-            'solid_content': TK.MAT_SOLID_CONTENT,
-            'unit_price': TK.MAT_UNIT_PRICE,
-            'ph': TK.MAT_PH,
-            'molecular_weight': TK.MAT_MOL_WEIGHT,
-            'glass_transition': TK.MAT_TG,
-            'oh_value': TK.MAT_OH_VALUE,
-            'min_limit': TK.MAT_MIN_LIMIT,
-            'max_limit': TK.MAT_MAX_LIMIT,
-            'oil_absorption': TK.MAT_OIL_ABSORPTION,
-            'particle_size': TK.MAT_PARTICLE_SIZE,
-            'boiling_point': TK.MAT_BOILING_POINT,
-            'evaporation_rate': TK.MAT_EVAPORATION_RATE,
-            'voc_g_l': TK.MAT_VOC
-        }
-        for key, widget in self.field_labels.items():
-            if key in field_map:
-                widget.config(text=t(field_map[key]) + ":")
-
-        # Buttons
-        if hasattr(self, 'save_btn'):
-            self.save_btn.config(text=t(TK.SAVE))
-        if hasattr(self, 'delete_btn'):
-            self.delete_btn.config(text=t(TK.DELETE))
-        if hasattr(self, 'import_btn'):
-            self.import_btn.config(text=f"{ICONS['import']} Excel {t(TK.FORM_IMPORT)}")
-        if hasattr(self, 'export_btn'):
-            self.export_btn.config(text=f"{ICONS['export']} Excel {t(TK.FORM_EXPORT)}")
     
     def _clear_form(self):
         """Formu temizle"""
@@ -695,9 +621,9 @@ class MaterialManagementPanel(ttk.Frame, I18nMixin):
             self.material_tree.selection_remove(item)
     
     def _import_materials(self):
-        """Excel/CSV'den malzeme import et"""
+        """Excel/CSV'den hammadde import et"""
         file_path = filedialog.askopenfilename(
-            title="Malzeme Dosyası Seç",
+            title="hammadde Dosyası Seç",
             filetypes=[
                 ("Excel files", "*.xlsx *.xls"),
                 ("CSV files", "*.csv"),
@@ -718,7 +644,7 @@ class MaterialManagementPanel(ttk.Frame, I18nMixin):
             
             # Sütun eşleştirme
             column_mapping = {
-                'name': ['name', 'malzeme', 'ad', 'material'],
+                'name': ['name', 'hammadde', 'ad', 'material'],
                 'category': ['category', 'kategori', 'type', 'tip'],
                 'density': ['density', 'yoğunluk', 'özgül ağırlık'],
                 'ph': ['ph'],
@@ -769,7 +695,7 @@ class MaterialManagementPanel(ttk.Frame, I18nMixin):
                 
                 conn.commit()
             
-            messagebox.showinfo("Başarılı", f"{imported} malzeme import edildi.")
+            messagebox.showinfo("Başarılı", f"{imported} hammadde import edildi.")
             self._load_materials()
             
         except ImportError:

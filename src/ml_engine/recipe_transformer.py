@@ -1,12 +1,12 @@
 """
 Paint Formulation AI - Reçete Dönüştürücü (Recipe Transformer)
 ===========================================================
-Reçete verilerini (malzeme listesi ve oranlar) ML modelleri için
+Reçete verilerini (hammadde listesi ve oranlar) ML modelleri için
 sabit boyutlu sayısal vektörlere dönüştürür.
 
 Kullanılan Yöntem: Domain-Specific Feature Engineering
 - Basit One-Hot Encoding yerine kimyasal özelliklerin ağırlıklı ortalamaları kullanılır.
-- Bu sayede yeni malzemeler eklense bile modelin yeniden eğitilmesine gerek kalmaz.
+- Bu sayede yeni hammaddeler eklense bile modelin yeniden eğitilmesine gerek kalmaz.
 - P/B oranı, VOC, katı madde gibi kritik boya parametreleri hesaplanır.
 """
 
@@ -58,7 +58,7 @@ class RecipeTransformer:
         Bir reçete listesini özellik vektörüne dönüştürür.
         
         Args:
-            recipe: Malzeme listesi. Her öğe şunları içermeli:
+            recipe: hammadde listesi. Her öğe şunları içermeli:
                    - percentage (veya amount)
                    - material_category
                    - kimyasal özellikler (oh_value, density vb.)

@@ -1,7 +1,7 @@
 """
-Material Repository - Malzeme veri erişim katmanı
+Material Repository - hammadde veri erişim katmanı
 =================================================
-Repository Pattern ile malzeme CRUD operasyonlarını izole eder.
+Repository Pattern ile hammadde CRUD operasyonlarını izole eder.
 
 Avantajlar:
 - Tek sorumluluk (SRP)
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 class MaterialRepository:
     """
-    Malzeme veri erişim sınıfı.
+    hammadde veri erişim sınıfı.
     
     LocalDBManager'ı sararak domain-specific bir interface sağlar.
     
@@ -47,25 +47,25 @@ class MaterialRepository:
     
     def create(self, data: Dict) -> int:
         """
-        Yeni malzeme ekle.
+        Yeni hammadde ekle.
         
         Args:
-            data: Malzeme verileri (name, code, category, etc.)
+            data: hammadde verileri (name, code, category, etc.)
         
         Returns:
-            Oluşturulan malzeme ID
+            Oluşturulan hammadde ID
         """
         return self._db.add_material(data)
     
     def get_by_id(self, material_id: int) -> Optional[Dict]:
         """
-        ID ile malzeme getir.
+        ID ile hammadde getir.
         
         Args:
-            material_id: Malzeme ID
+            material_id: hammadde ID
             
         Returns:
-            Malzeme dict veya None
+            hammadde dict veya None
         """
         with self._db.get_connection() as conn:
             cursor = conn.cursor()
@@ -75,25 +75,25 @@ class MaterialRepository:
     
     def get_by_code(self, code: str) -> Optional[Dict]:
         """
-        Kod ile malzeme getir.
+        Kod ile hammadde getir.
         
         Args:
-            code: Malzeme kodu
+            code: hammadde kodu
             
         Returns:
-            Malzeme dict veya None
+            hammadde dict veya None
         """
         return self._db.get_material_by_code(code)
     
     def get_by_name(self, name: str) -> Optional[Dict]:
         """
-        İsim ile malzeme getir.
+        İsim ile hammadde getir.
         
         Args:
-            name: Malzeme adı
+            name: hammadde adı
             
         Returns:
-            Malzeme dict veya None
+            hammadde dict veya None
         """
         with self._db.get_connection() as conn:
             cursor = conn.cursor()
@@ -103,28 +103,28 @@ class MaterialRepository:
     
     def get_all(self) -> List[Dict]:
         """
-        Tüm malzemeleri getir.
+        Tüm hammaddeleri getir.
         
         Returns:
-            Malzeme listesi
+            hammadde listesi
         """
         return self._db.get_all_materials()
     
     def get_incomplete(self) -> List[Dict]:
         """
-        Eksik bilgili malzemeleri getir.
+        Eksik bilgili hammaddeleri getir.
         
         Returns:
-            is_incomplete=True olan malzemeler
+            is_incomplete=True olan hammaddeler
         """
         return self._db.get_incomplete_materials()
     
     def get_complete(self) -> List[Dict]:
         """
-        Tam bilgili malzemeleri getir (ML için uygun).
+        Tam bilgili hammaddeleri getir (ML için uygun).
         
         Returns:
-            is_incomplete=False olan malzemeler
+            is_incomplete=False olan hammaddeler
         """
         return self._db.get_complete_materials()
     
@@ -133,20 +133,20 @@ class MaterialRepository:
         Yoksa oluştur, varsa mevcut ID döndür (Lazy Creation).
         
         Args:
-            code: Malzeme kodu
-            name: Malzeme adı (opsiyonel, boşsa code kullanılır)
+            code: hammadde kodu
+            name: hammadde adı (opsiyonel, boşsa code kullanılır)
             
         Returns:
-            Tuple[int, bool]: (malzeme_id, yeni_mi)
+            Tuple[int, bool]: (hammadde_id, yeni_mi)
         """
         return self._db.add_material_if_not_exists(code, name)
     
     def update(self, material_id: int, data: Dict) -> bool:
         """
-        Malzeme güncelle.
+        hammadde güncelle.
         
         Args:
-            material_id: Güncellenecek malzeme ID
+            material_id: Güncellenecek hammadde ID
             data: Güncellenecek alanlar
             
         Returns:
@@ -185,10 +185,10 @@ class MaterialRepository:
     
     def mark_complete(self, material_id: int) -> bool:
         """
-        Malzemeyi tamamlanmış olarak işaretle.
+        hammaddeyi tamamlanmış olarak işaretle.
         
         Args:
-            material_id: Malzeme ID
+            material_id: hammadde ID
             
         Returns:
             Başarılı ise True
@@ -197,10 +197,10 @@ class MaterialRepository:
     
     def delete(self, material_id: int) -> bool:
         """
-        Malzeme sil.
+        hammadde sil.
         
         Args:
-            material_id: Silinecek malzeme ID
+            material_id: Silinecek hammadde ID
             
         Returns:
             Silme başarılı ise True
@@ -215,14 +215,14 @@ class MaterialRepository:
     
     def search(self, query: str, limit: int = 20) -> List[Dict]:
         """
-        Malzeme ara.
+        hammadde ara.
         
         Args:
             query: Arama metni
             limit: Maksimum sonuç sayısı
             
         Returns:
-            Eşleşen malzemeler
+            Eşleşen hammaddeler
         """
         with self._db.get_connection() as conn:
             cursor = conn.cursor()
@@ -237,10 +237,10 @@ class MaterialRepository:
     
     def count(self) -> int:
         """
-        Toplam malzeme sayısını getir.
+        Toplam hammadde sayısını getir.
         
         Returns:
-            Malzeme sayısı
+            hammadde sayısı
         """
         with self._db.get_connection() as conn:
             cursor = conn.cursor()
@@ -249,10 +249,10 @@ class MaterialRepository:
     
     def count_incomplete(self) -> int:
         """
-        Eksik bilgili malzeme sayısını getir.
+        Eksik bilgili hammadde sayısını getir.
         
         Returns:
-            Eksik malzeme sayısı
+            Eksik hammadde sayısı
         """
         with self._db.get_connection() as conn:
             cursor = conn.cursor()
@@ -261,13 +261,13 @@ class MaterialRepository:
     
     def get_by_category(self, category: str) -> List[Dict]:
         """
-        Kategoriye göre malzemeleri getir.
+        Kategoriye göre hammaddeleri getir.
         
         Args:
-            category: Malzeme kategorisi
+            category: hammadde kategorisi
             
         Returns:
-            O kategorideki malzemeler
+            O kategorideki hammaddeler
         """
         with self._db.get_connection() as conn:
             cursor = conn.cursor()

@@ -76,7 +76,7 @@ class ChemicalValidator:
     def __init__(self, db_manager=None):
         """
         Args:
-            db_manager: Veritabanı yöneticisi (malzeme özelliklerini çekmek için)
+            db_manager: Veritabanı yöneticisi (hammadde özelliklerini çekmek için)
         """
         self.db_manager = db_manager
         self._material_cache = {}
@@ -194,7 +194,7 @@ class ChemicalValidator:
         Ra = √[4(δD1-δD2)² + (δP1-δP2)² + (δH1-δH2)²]
         
         Args:
-            binder: Bağlayıcı malzeme bilgisi (hansen_d, hansen_p, hansen_h)
+            binder: Bağlayıcı hammadde bilgisi (hansen_d, hansen_p, hansen_h)
             solvents: Çözücü listesi (aynı parametrelerle)
             
         Returns:
@@ -323,7 +323,7 @@ class ChemicalValidator:
             category = (comp.get('category', '') or '').lower()
             name = comp.get('name', 'Bilinmeyen')
             
-            # Önce malzeme spesifik limitleri kontrol et
+            # Önce hammadde spesifik limitleri kontrol et
             max_limit = comp.get('max_limit')
             min_limit = comp.get('min_limit')
             

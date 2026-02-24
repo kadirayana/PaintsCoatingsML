@@ -169,7 +169,7 @@ class SmartImportDialog(tk.Toplevel):
         
         self.fix_materials_btn = ttk.Button(
             btn_frame,
-            text="🔧 Eksik Malzemeleri Düzenle",
+            text="🔧 Eksik hammaddeleri Düzenle",
             command=self._goto_materials,
             state='disabled'
         )
@@ -312,7 +312,7 @@ class SmartImportDialog(tk.Toplevel):
             try:
                 incomplete = self.db_manager.get_incomplete_materials()
                 if incomplete:
-                    self._log_result(f"\n⚠️ {len(incomplete)} eksik bilgili malzeme var")
+                    self._log_result(f"\n⚠️ {len(incomplete)} eksik bilgili hammadde var")
                     self.fix_materials_btn.config(state='normal')
             except Exception:
                 pass

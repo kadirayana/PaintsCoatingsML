@@ -1,10 +1,10 @@
 """
-Paint Formulation AI - Akıllı Malzeme Öneri Sistemi
+Paint Formulation AI - Akıllı hammadde Öneri Sistemi
 ====================================================
 Kimya mühendisi gibi düşünen öneri motoru
 
 Özellikler:
-- Alternatif malzeme önerisi
+- Alternatif hammadde önerisi
 - Maliyet-performans trade-off analizi
 - Kimyasal uyumluluk kontrolü
 - Formülasyon iyileştirme önerileri
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class MaterialRecommendation:
-    """Malzeme önerisi veri sınıfı"""
+    """hammadde önerisi veri sınıfı"""
     current_material: str
     recommended_material: str
     reason: str
@@ -45,11 +45,11 @@ class FormulationSuggestion:
 
 class MaterialRecommender:
     """
-    Akıllı Malzeme Öneri Sistemi
+    Akıllı hammadde Öneri Sistemi
     
     Kimya mühendisliği bilgisi ile:
-    - Malzeme-performans ilişkilerini öğrenir
-    - Alternatif malzemeler önerir
+    - hammadde-performans ilişkilerini öğrenir
+    - Alternatif hammaddeler önerir
     - Maliyet optimizasyonu yapar
     - Kimyasal uyumluluk kontrol eder
     """
@@ -67,7 +67,7 @@ class MaterialRecommender:
         # Kimyasal bilgi veritabanı
         self.chemical_knowledge = self._load_chemical_knowledge()
         
-        # Öğrenilmiş malzeme pattern'leri
+        # Öğrenilmiş hammadde pattern'leri
         self.material_patterns: Dict = {}
         
         # Formülasyon geçmişi (benzerlik araması için)
@@ -235,7 +235,7 @@ class MaterialRecommender:
         top_n: int = 5
     ) -> List[Dict]:
         """
-        Hedef özelliklere uygun malzemeleri öner (Kısıtlara uygun olarak)
+        Hedef özelliklere uygun hammaddeleri öner (Kısıtlara uygun olarak)
         
         Args:
             target_properties: Hedeflenen özellikler (örn: {'gloss': 'high', 'cost_level': 'low'})
@@ -243,7 +243,7 @@ class MaterialRecommender:
             top_n: Öneri sayısı
             
         Returns:
-            Önerilen malzemeler listesi
+            Önerilen hammaddeler listesi
         """
         suggestions = []
         constraints = constraints or {}
@@ -255,7 +255,7 @@ class MaterialRecommender:
         for cat_name, items in self.chemical_knowledge.get('material_categories', {}).items():
             for mat_key, data in items.items():
                 
-                # 1. Yasaklı malzeme kontrolü
+                # 1. Yasaklı hammadde kontrolü
                 if mat_key.lower() in prohibited or data.get('name_tr', '').lower() in prohibited:
                     continue
                     
@@ -304,11 +304,11 @@ class MaterialRecommender:
         constraints: Dict = None
     ) -> List[MaterialRecommendation]:
         """
-        Alternatif malzeme öner
+        Alternatif hammadde öner
         
         Args:
-            current_material: Mevcut malzeme kodu/adı
-            current_category: Malzeme kategorisi (binder, pigment, filler)
+            current_material: Mevcut hammadde kodu/adı
+            current_category: hammadde kategorisi (binder, pigment, filler)
             target_properties: Hedeflenen özellikler
             constraints: Kısıtlar (maliyet, tedarik, vb.)
             
@@ -320,7 +320,7 @@ class MaterialRecommender:
         # Kategori bilgisini al
         category_data = self.chemical_knowledge.get('material_categories', {}).get(current_category, {})
         
-        # Mevcut malzeme bilgisini bul
+        # Mevcut hammadde bilgisini bul
         current_data = None
         current_key = None
         for key, data in category_data.items():
@@ -330,7 +330,7 @@ class MaterialRecommender:
                 break
         
         if not current_data:
-            logger.warning(f"Malzeme bulunamadı: {current_material}")
+            logger.warning(f"hammadde bulunamadı: {current_material}")
             return recommendations
         
         # Alternatifleri değerlendir
@@ -479,7 +479,7 @@ class MaterialRecommender:
         # Ortak uyumluluk
         common = current_compat & sub_compat
         if common:
-            notes.append(f"Her iki malzeme de {', '.join(list(common)[:2])} ile uyumlu")
+            notes.append(f"Her iki hammadde de {', '.join(list(common)[:2])} ile uyumlu")
         
         # Yeni gereksinimler
         new_reqs = sub_compat - current_compat
@@ -638,7 +638,7 @@ class MaterialRecommender:
             logger.error(f"Kimyasal bilgi kayıt hatası: {e}")
     
     def add_material_knowledge(self, category: str, material_key: str, data: Dict):
-        """Yeni malzeme bilgisi ekle"""
+        """Yeni hammadde bilgisi ekle"""
         if 'material_categories' not in self.chemical_knowledge:
             self.chemical_knowledge['material_categories'] = {}
         

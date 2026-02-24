@@ -181,7 +181,7 @@ class LocalDBManager:
             except Exception as e:
                 logger.error(f"Unexpected error adding column 'trial_id' to components: {e}")
             
-            # 5. Materials (Shared Master Data - No Change)
+            # 5. materials (Shared Master Data - No Change)
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS materials (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -340,7 +340,7 @@ class LocalDBManager:
                 # Don't crash on migration - log and continue
                 logger.warning(f"created_at migration warning: {e}")
         
-        # Materials table migrations - INTEGER DEFAULT 0 is constant, so this is safe
+        # materials table migrations - INTEGER DEFAULT 0 is constant, so this is safe
         cursor.execute("PRAGMA table_info(materials)")
         mat_cols = [col[1] for col in cursor.fetchall()]
         if 'is_incomplete' not in mat_cols:
@@ -723,7 +723,11 @@ class LocalDBManager:
                     t.total_cost,
                     pf.project_id
                 FROM trials t
-                LEFT JOIN parent_formulations pf ON t.parent_formulation_id = pf.id
+                JOIN parent_formulations pf ON t.parent_formulation_id = pf.id
+                JOIN projects p ON pf.project_id = p.id
+                WHERE (t.is_deleted = 0 OR t.is_deleted IS NULL)
+                  AND (pf.is_deleted = 0 OR pf.is_deleted IS NULL)
+                  AND p.is_active = 1
                 ORDER BY t.trial_date DESC
             ''')
             results = [dict(row) for row in cursor.fetchall()]

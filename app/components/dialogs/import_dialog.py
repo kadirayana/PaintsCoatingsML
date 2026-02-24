@@ -81,7 +81,7 @@ class ImportProgressDialog(tk.Toplevel):
         
         self.quickfix_btn = ttk.Button(
             self.button_frame,
-            text="🔧 Eksik Malzemeleri Düzenle",
+            text="🔧 Eksik hammaddeleri Düzenle",
             command=self._on_quickfix,
             state='disabled'
         )
@@ -120,12 +120,12 @@ class ImportProgressDialog(tk.Toplevel):
             self.results_text.insert(tk.END, "═" * 45 + "\n\n")
             
             self.results_text.insert(tk.END, f"📊 Formülasyon: {result.formulations_imported} adet\n")
-            self.results_text.insert(tk.END, f"🧪 Yeni Malzeme: {result.materials_created} adet\n")
+            self.results_text.insert(tk.END, f"🧪 Yeni hammadde: {result.materials_created} adet\n")
             
             if result.incomplete_materials:
                 self.incomplete_materials = result.incomplete_materials
                 self.results_text.insert(tk.END, "\n" + "─" * 45 + "\n")
-                self.results_text.insert(tk.END, "⚠️ EKSİK BİLGİLİ MALZEMELER:\n")
+                self.results_text.insert(tk.END, "⚠️ EKSİK BİLGİLİ hammaddeler:\n")
                 self.results_text.insert(tk.END, "─" * 45 + "\n\n")
                 
                 for mat in result.incomplete_materials[:10]:  # Show first 10
@@ -134,8 +134,8 @@ class ImportProgressDialog(tk.Toplevel):
                 if len(result.incomplete_materials) > 10:
                     self.results_text.insert(tk.END, f"\n  ... ve {len(result.incomplete_materials) - 10} tane daha\n")
                 
-                self.results_text.insert(tk.END, "\n💡 Bu malzemelerin fiziksel özelliklerini\n")
-                self.results_text.insert(tk.END, "   Malzemeler sekmesinden tamamlayın.\n")
+                self.results_text.insert(tk.END, "\n💡 Bu hammaddelerin fiziksel özelliklerini\n")
+                self.results_text.insert(tk.END, "   hammaddeler sekmesinden tamamlayın.\n")
                 
                 # Enable quickfix button
                 self.quickfix_btn.config(state='normal')
@@ -164,7 +164,7 @@ class ImportProgressDialog(tk.Toplevel):
         self.destroy()
 
 
-class IncompleteMaterialsNotification:
+class IncompletematerialsNotification:
     """
     Utility class to show notifications about incomplete materials.
     """
@@ -184,14 +184,14 @@ class IncompleteMaterialsNotification:
         
         message = (
             f"⚠️ Dikkat!\n\n"
-            f"Veritabanında {incomplete_count} adet eksik bilgili malzeme bulundu.\n\n"
-            f"Bu malzemelerin fiziksel özellikleri (yoğunluk, katı içeriği vb.) "
+            f"Veritabanında {incomplete_count} adet eksik bilgili hammadde bulundu.\n\n"
+            f"Bu hammaddelerin fiziksel özellikleri (yoğunluk, katı içeriği vb.) "
             f"tamamlanmadan ML modeli doğru tahminler yapamaz.\n\n"
-            f"Malzemeler sekmesine gidip bu bilgileri doldurmak ister misiniz?"
+            f"hammaddeler sekmesine gidip bu bilgileri doldurmak ister misiniz?"
         )
         
         result = messagebox.askyesno(
-            "Eksik Malzeme Bilgisi",
+            "Eksik hammadde Bilgisi",
             message,
             parent=parent,
             icon='warning'
@@ -218,14 +218,14 @@ class IncompleteMaterialsNotification:
             
             if result.materials_created > 0:
                 message += (
-                    f"• {result.materials_created} yeni malzeme oluşturuldu\n\n"
-                    f"⚠️ Uyarı: Yeni oluşturulan malzemelerin fiziksel özellikleri eksik.\n"
-                    f"Lütfen Malzemeler sekmesinden tamamlayın."
+                    f"• {result.materials_created} yeni hammadde oluşturuldu\n\n"
+                    f"⚠️ Uyarı: Yeni oluşturulan hammaddelerin fiziksel özellikleri eksik.\n"
+                    f"Lütfen hammaddeler sekmesinden tamamlayın."
                 )
                 
                 answer = messagebox.askyesno(
                     "İçe Aktarım Tamamlandı",
-                    message + "\n\nMalzemeler sekmesine gitmek ister misiniz?",
+                    message + "\n\nhammaddeler sekmesine gitmek ister misiniz?",
                     parent=parent
                 )
                 

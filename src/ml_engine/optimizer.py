@@ -6,7 +6,7 @@ Genetik Algoritma kullanarak hedeflenen özelliklelere sahip en iyi reçeteyi bu
 Yöntem:
 - İleri Yönlü Model (ContinuousLearner) kullanılarak aday reçeteler değerlendirilir.
 - Evrimsel strateji ile reçeteler iyileştirilir.
-- Kimyasal kısıtlar (PVC, pH, malzeme limitleri) ile geçersiz reçeteler engellenir.
+- Kimyasal kısıtlar (PVC, pH, hammadde limitleri) ile geçersiz reçeteler engellenir.
 """
 
 import random
@@ -167,7 +167,7 @@ class MLOptimizer:
         return child
 
     def _mutate(self, recipe, available_materials):
-        """Mutasyon: Oran değiştir veya malzeme değiştir"""
+        """Mutasyon: Oran değiştir veya hammadde değiştir"""
         if not recipe: return
         
         if random.random() < self.mutation_rate:
@@ -184,7 +184,7 @@ class MLOptimizer:
                     c['percentage'] = c['amount']
                     
         if random.random() < (self.mutation_rate / 2):
-            # Tip 2: Malzeme Ekle/Çıkar
+            # Tip 2: hammadde Ekle/Çıkar
             if len(recipe) < 6:
                 # Ekle
                 new_mat = random.choice(available_materials)

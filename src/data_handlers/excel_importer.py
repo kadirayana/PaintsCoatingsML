@@ -54,8 +54,8 @@ class ExcelFormulationImporter:
     
     # Expected column mappings (flexible matching)
     COLUMN_MAPPINGS = {
-        'material_code': ['material code', 'code', 'malzeme kodu', 'kod', 'mat_code', 'material_code'],
-        'material_name': ['material name', 'name', 'malzeme adı', 'malzeme adi', 'ad', 'material_name', 'material'],
+        'material_code': ['material code', 'code', 'hammadde kodu', 'kod', 'mat_code', 'material_code'],
+        'material_name': ['material name', 'name', 'hammadde adı', 'hammadde adi', 'ad', 'material_name', 'material'],
         'quantity': ['quantity', 'amount', 'miktar', 'qty', 'percentage', 'oran', '%'],
         'unit': ['unit', 'birim', 'units'],
         'category': ['category', 'kategori', 'type', 'tip']
@@ -165,7 +165,7 @@ class ExcelFormulationImporter:
                         category = str(row.get('category', 'other')).strip() if 'category' in row else 'other'
                         
                         if not material_code:
-                            errors.append(f"Satır {idx+2}: Malzeme kodu boş")
+                            errors.append(f"Satır {idx+2}: hammadde kodu boş")
                             continue
                         
                         # Lookup or create material
@@ -211,7 +211,7 @@ class ExcelFormulationImporter:
             if formulations_created > 0:
                 message = f"{formulations_created} formülasyon başarıyla içe aktarıldı."
                 if materials_created > 0:
-                    message += f"\n{materials_created} yeni malzeme oluşturuldu (eksik bilgi ile)."
+                    message += f"\n{materials_created} yeni hammadde oluşturuldu (eksik bilgi ile)."
             else:
                 message = "Hiçbir formülasyon içe aktarılamadı."
             

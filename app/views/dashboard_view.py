@@ -20,7 +20,7 @@ class DashboardPanel(ttk.LabelFrame):
     """
     
     # Kart -> Sekme eşlemesi (0-indexed)
-    # Tab order: 0=Dashboard, 1=Malzemeler, 2=Formülasyon, 3=Test Sonuçları, 4=ML Merkezi, 5=Karşılaştırma
+    # Tab order: 0=Dashboard, 1=hammaddeler, 2=Formülasyon, 3=Test Sonuçları, 4=ML Merkezi, 5=Karşılaştırma
     CARD_TAB_MAPPING = {
         "Toplam Formül": 2,      # Formülasyon sekmesi
         "Bu Ay Eklenen": 2,      # Formülasyon sekmesi

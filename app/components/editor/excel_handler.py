@@ -22,8 +22,8 @@ class ExcelHandler:
     
     # Excel sütun eşlemeleri (Türkçe başlıklar)
     COLUMN_MAPPINGS = {
-        'code': ['Hammadde Kodu', 'Malzeme Kodu', 'Kod', 'Code', 'Material Code'],
-        'name': ['Hammadde Adı', 'Malzeme Adı', 'Ad', 'Name', 'Material Name'],
+        'code': ['Hammadde Kodu', 'hammadde Kodu', 'Kod', 'Code', 'Material Code'],
+        'name': ['Hammadde Adı', 'hammadde Adı', 'Ad', 'Name', 'Material Name'],
         'amount': ['Miktar', 'Amount', 'Kg', 'Quantity'],
         'solid_content': ['Katı %', 'Katı Oranı', 'Solid %', 'Solid Content'],
         'unit_price': ['Birim Fiyat', 'Fiyat', 'Price', 'Unit Price'],

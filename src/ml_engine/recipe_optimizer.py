@@ -140,7 +140,7 @@ class RecipeOptimizer:
                 - 'max_voc': Maximum VOC g/L
                 - 'required_categories': ['binder', 'pigment', ...]
             optimization_params: Override default scipy.optimize parameters
-            fixed_materials: Materials that must be in the recipe
+            fixed_materials: materials that must be in the recipe
             
         Returns:
             OptimizationResult with optimized recipe

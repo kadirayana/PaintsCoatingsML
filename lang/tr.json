@@ -46,7 +46,7 @@
         "new_project": "➕ Yeni Proje",
         "dashboard": "📊 Dashboard",
         "formulations": "📋 Formülasyonlar",
-        "materials": "📦 Malzemeler",
+        "materials": "📦 Hammaddeler",
         "test_results": "🧪 Test Sonuçları",
         "optimization": "⚖️ Karşılaştırma",
         "ml_center": "🧠 ML Merkezi"
@@ -110,7 +110,7 @@
         "quantity": "Miktar"
     },
     "material_view": {
-        "title": "⚗️ Malzeme Detayları",
+        "title": "⚗️ Hammadde Detayları",
         "search": "🔍 Arama",
         "category": "Kategori:",
         "basic_info": "📋 Temel Bilgiler",
@@ -120,7 +120,7 @@
         "pigment_properties": "🎨 Pigment/Dolgu Özellikleri",
         "solvent_properties": "💧 Çözücü Özellikleri",
         "cost": "💰 Maliyet",
-        "name": "Malzeme Adı:",
+        "name": "Hammadde Adı:",
         "code": "Kod:",
         "density": "Yoğunluk (g/cm³):",
         "solid_content": "Katı İçeriği (%):",
@@ -215,7 +215,7 @@
             "are_you_sure": "Emin misiniz?"
         },
         "info": {
-            "auto_add_materials": "Yeni malzeme kodları otomatik olarak veritabanına eklenecektir."
+            "auto_add_raw materials": "Yeni hammadde kodları otomatik olarak veritabanına eklenecektir."
         }
     },
     "params": {

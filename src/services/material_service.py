@@ -18,7 +18,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-class MaterialService:
+class materialservice:
     """
     Hammadde yönetim servisi.
     
