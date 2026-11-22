@@ -3,9 +3,9 @@
 name: Windows EXE
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:      # Actions sekmesinden elle de çalıştırılabilir
   push:
-    branches: [main, claude/hopeful-goldberg-3uwtg0]
+    branches: [main]      # yalnızca main: aynı commit için çift derleme/çift mail olmasın
 
 jobs:
   build:
@@ -34,9 +34,12 @@ jobs:
           $dir = Join-Path $env:RUNNER_TEMP 'smoke'
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
           Copy-Item dist\PaintFormulationAI.exe $dir
+          # Uygulama verilerini %LOCALAPPDATA%\PaintFormulationAI altına yazar
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'appdata'
+          $dataDir = Join-Path $env:LOCALAPPDATA 'PaintFormulationAI'
           $p = Start-Process -FilePath "$dir\PaintFormulationAI.exe" -WorkingDirectory $dir -PassThru
           Start-Sleep -Seconds 60
-          $logs = Get-ChildItem "$dir\logs\*.log" -ErrorAction SilentlyContinue
+          $logs = Get-ChildItem "$dataDir\logs\*.log" -ErrorAction SilentlyContinue
           if ($logs) { Get-Content $logs | Select-Object -Last 25 }
           if ($p.HasExited) { Write-Error "Uygulama erken kapandı (çıkış kodu $($p.ExitCode))"; exit 1 }
           Stop-Process -Id $p.Id -Force
@@ -45,6 +48,9 @@ jobs:
             Write-Error 'Başlangıç tamamlanmadı'; exit 1 }
           $errors = Select-String -Path $logs -Pattern ' - (ERROR|CRITICAL) - '
           if ($errors) { $errors; exit 1 }
+          # EXE'nin bulunduğu klasöre (ör. masaüstü) klasör açılmamalı
+          $extra = Get-ChildItem $dir | Where-Object { $_.Name -ne 'PaintFormulationAI.exe' }
+          if ($extra) { Write-Error "EXE klasörüne beklenmeyen dosyalar yazıldı: $($extra.Name -join ', ')"; exit 1 }
 
       - uses: actions/upload-artifact@v4
         with:
