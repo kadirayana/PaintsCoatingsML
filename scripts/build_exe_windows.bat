@@ -13,8 +13,7 @@ if not exist venv\Scripts\python.exe (
 venv\Scripts\python.exe -m PyInstaller --noconfirm --clean build_spec.spec || goto :error
 echo.
 echo EXE hazir: dist\PaintFormulationAI.exe
-echo Not: EXE ilk calistiginda yanina data_storage, logs ve assets klasorlerini olusturur;
-echo      bu yuzden yazma izni olan bir klasorde (orn. Belgeler) calistirin, Program Files'ta degil.
+echo Veriler ve loglar %%LOCALAPPDATA%%\PaintFormulationAI klasorune yazilir.
 pause
 exit /b 0
 

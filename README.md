@@ -58,7 +58,8 @@ Built with Python and Tkinter, this tool helps reduce development cycles by inte
 **Windows (recommended):** install [Python 3.10+](https://www.python.org/downloads/) with
 "Add python.exe to PATH", run `scripts\setup_windows.bat` once, then start the app with
 `scripts\run_windows.bat`. To build a single-file EXE run `scripts\build_exe_windows.bat`
-(output: `dist\PaintFormulationAI.exe`; run it from a writable folder, not `Program Files`).
+(output: `dist\PaintFormulationAI.exe`, no Python needed; also built by GitHub Actions). Data, models,
+settings and logs are stored in `%LOCALAPPDATA%\PaintFormulationAI`, not next to the EXE.
 
 **Manual (any platform):**
 ```bash
@@ -123,9 +124,10 @@ Python ve Tkinter kullanılarak geliştirilen bu araç, fiziksel testlerden önc
 3. `scripts\setup_windows.bat` dosyasına çift tıklayın (bir kez; sanal ortamı kurar ve bağımlılıkları yükler).
 4. Uygulamayı `scripts\run_windows.bat` ile başlatın.
 
-**Tek dosya EXE:** `scripts\build_exe_windows.bat` → `dist\PaintFormulationAI.exe`. EXE ilk açılışta yanına
-`data_storage`, `logs` ve `assets` klasörlerini oluşturur; bu yüzden yazma izni olan bir klasörde (ör. Belgeler)
-çalıştırın, `Program Files` içinde değil. Hata durumunda ayrıntılar `logs\` klasöründedir.
+**Tek dosya EXE (Python gerekmez):** `scripts\build_exe_windows.bat` → `dist\PaintFormulationAI.exe`
+veya GitHub'da **Actions → Windows EXE** çalıştırmasının "Artifacts" bölümünden indirin. EXE herhangi bir
+klasörden çalıştırılabilir; veriler (veritabanı, modeller, ayarlar, loglar) EXE'nin yanına değil
+`%LOCALAPPDATA%\PaintFormulationAI` klasörüne yazılır. Hata durumunda ayrıntılar oradaki `logs\` klasöründedir.
 
 #### Elle kurulum (tüm platformlar)
 

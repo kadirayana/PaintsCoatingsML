@@ -12,10 +12,37 @@ import logging
 from datetime import datetime
 from configparser import ConfigParser
 
-# Uygulama kök dizinini belirle
+def _user_data_dir() -> str:
+    """Kullanıcı veri klasörü: Windows'ta %LOCALAPPDATA%\\PaintFormulationAI"""
+    base = os.environ.get('LOCALAPPDATA') or os.path.join(os.path.expanduser('~'), '.local', 'share')
+    return os.path.join(base, 'PaintFormulationAI')
+
+
+def _migrate_from_exe_folder(old_dir: str, new_dir: str) -> None:
+    """Eski sürüm verileri EXE'nin yanına yazıyordu; varsa bir kez yeni konuma kopyala."""
+    import shutil
+    old_db = os.path.join(old_dir, 'data_storage', 'db.sqlite')
+    new_db = os.path.join(new_dir, 'data_storage', 'db.sqlite')
+    if not os.path.exists(old_db) or os.path.exists(new_db):
+        return
+    for name in ('data_storage', os.path.join('assets', 'models')):
+        src = os.path.join(old_dir, name)
+        if os.path.isdir(src):
+            shutil.copytree(src, os.path.join(new_dir, name), dirs_exist_ok=True)
+    if os.path.exists(os.path.join(old_dir, 'config.ini')):
+        shutil.copy2(os.path.join(old_dir, 'config.ini'), os.path.join(new_dir, 'config.ini'))
+
+
+# Uygulama veri dizinini belirle
 if getattr(sys, 'frozen', False):
-    # PyInstaller ile paketlenmiş EXE içinde çalışıyoruz
-    APP_DIR = os.path.dirname(sys.executable)
+    # PyInstaller EXE: veriler EXE'nin yanına DEĞİL kullanıcı veri klasörüne yazılır
+    # (aksi halde EXE masaüstünde çalıştırılınca masaüstü klasörlerle dolar, Program Files'ta da yazılamaz)
+    APP_DIR = _user_data_dir()
+    os.makedirs(APP_DIR, exist_ok=True)
+    try:
+        _migrate_from_exe_folder(os.path.dirname(sys.executable), APP_DIR)
+    except OSError:
+        pass
 else:
     # Normal Python script olarak çalışıyoruz
     APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
