@@ -45,8 +45,13 @@ class VariationComparisonPanel(ttk.Frame, I18nMixin):
         # 1. Fetch Data
         trials = self._fetch_trials_for_concept(concept_id)
         
+        # Önceki tabloyu kaldır (aksi halde her seçimde yeni tablo alta eklenir)
+        if self.tree is not None:
+            self.tree.destroy()
+            self.tree = None
+        
         if not trials:
-            # Keep empty state
+            self.empty_label.pack(expand=True, pady=50)
             return
         
         # Remove empty label if trials exist
@@ -127,14 +132,17 @@ class VariationComparisonPanel(ttk.Frame, I18nMixin):
                  self._highlight_differences(item_id, row_vals, columns)
 
         # Styling
-        self.tree.tag_configure('section', background='#e1e1e1', font=('Segoe UI', 9, 'bold'))
-        self.tree.tag_configure('diff', background='#fff9c4') # Light yellow
+        # Açık zeminlerde koyu tema yazı rengi okunmuyor: yazı rengini açıkça koyu yap
+        self.tree.tag_configure('section', background='#e1e1e1', foreground='#202020', font=('Segoe UI', 9, 'bold'))
+        self.tree.tag_configure('diff', background='#fff9c4', foreground='#202020') # Light yellow
         
     def _fetch_trials_for_concept(self, concept_id):
         # Temporary direct DB access until we add specific method or pass data
         with self.db_manager.get_connection() as conn:
              cursor = conn.cursor()
-             cursor.execute("SELECT * FROM trials WHERE parent_formulation_id = ? ORDER BY trial_date ASC", (concept_id,))
+             cursor.execute(
+                 "SELECT * FROM trials WHERE parent_formulation_id = ? "
+                 "AND (is_deleted = 0 OR is_deleted IS NULL) ORDER BY id ASC", (concept_id,))
              return [dict(row) for row in cursor.fetchall()]
 
     def _highlight_differences(self, item_id, raw_values, col_ids):

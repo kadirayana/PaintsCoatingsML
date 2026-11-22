@@ -9,6 +9,7 @@ Geriye uyumluluk için burada re-export edilmektedir.
 """
 
 import os
+import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from configparser import ConfigParser
@@ -157,6 +158,10 @@ class PaintFormulationApp(I18nMixin):
         width = config.getint('UI', 'window_width', fallback=1200)
         height = config.getint('UI', 'window_height', fallback=800)
         self.root.geometry(f"{width}x{height}")
+        self.root.minsize(1100, 700)
+        if sys.platform == 'win32':
+            # 7 sekme + kenar çubuğu dar pencerede sekme adlarını kırpıyor; Windows'ta tam ekran aç
+            self.root.state('zoomed')
         
         # Project Context (Single Source of Truth for project/formulation state)
         self.context = ProjectContext(db_manager)
@@ -256,6 +261,7 @@ class PaintFormulationApp(I18nMixin):
             self.config.set('Application', 'language', lang)
             self._save_config()
             self._update_texts() # Refresh tab names and menus immediately
+            self._refresh_dashboard()  # içgörü metinleri yeni dilde üretilsin
 
     
     def _create_ui(self):
@@ -465,9 +471,7 @@ class PaintFormulationApp(I18nMixin):
                 trials = self.db_manager.get_recent_trials(50)
                 self.test_results_panel.load_history(trials)
             
-            stats = self.db_manager.get_dashboard_stats()
-            monthly_data = self.db_manager.get_monthly_formulation_counts()
-            self.dashboard.update_stats(stats, monthly_data)
+            self._refresh_dashboard()
             
             # Özel test metodlarını optimizasyon hedeflerine yükle
             if hasattr(self, 'optimization_panel') and hasattr(self.optimization_panel, 'load_custom_objectives'):
@@ -967,10 +971,33 @@ class PaintFormulationApp(I18nMixin):
         try:
             stats = self.db_manager.get_dashboard_stats()
             monthly_data = self.db_manager.get_monthly_formulation_counts()
-            insights = self.db_manager.get_dashboard_insights()
+            insights = self._build_insights(self.db_manager.get_dashboard_insights())
             self.dashboard.update_stats(stats, monthly_data, insights)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Dashboard yenileme hatası: {e}", exc_info=True)
+
+    @staticmethod
+    def _build_insights(facts: dict) -> list:
+        """Veritabanı özetinden dashboard içgörü kartları üret"""
+        insights = []
+        if not facts.get('projects'):
+            insights.append({'type': 'tip', 'title': t(TK.DASHBOARD_INSIGHT_START_TITLE),
+                             'message': t(TK.DASHBOARD_INSIGHT_START)})
+        if facts.get('pending_tests'):
+            insights.append({'type': 'warning', 'title': t(TK.DASHBOARD_INSIGHT_PENDING_TITLE),
+                             'message': t(TK.DASHBOARD_INSIGHT_PENDING).replace('{count}', str(facts['pending_tests']))})
+        if facts.get('best'):
+            code, score = facts['best']
+            insights.append({'type': 'success', 'title': t(TK.DASHBOARD_INSIGHT_BEST_TITLE),
+                             'message': t(TK.DASHBOARD_INSIGHT_BEST).replace('{code}', str(code))
+                                                                     .replace('{score}', f"{score:.1f}")})
+        if facts.get('incomplete_materials'):
+            insights.append({'type': 'tip', 'title': t(TK.DASHBOARD_INSIGHT_MATERIALS_TITLE),
+                             'message': t(TK.DASHBOARD_INSIGHT_MATERIALS).replace('{count}', str(facts['incomplete_materials']))})
+        if facts.get('projects') and facts.get('tested', 0) < 3:
+            insights.append({'type': 'info', 'title': t(TK.DASHBOARD_INSIGHT_ML_TITLE),
+                             'message': t(TK.DASHBOARD_INSIGHT_ML).replace('{count}', str(facts.get('tested', 0)))})
+        return insights
     
     def _on_import(self, file_path: str):
         """Dosya import olayı - arka planda çalışır"""

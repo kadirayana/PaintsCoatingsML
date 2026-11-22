@@ -24,6 +24,9 @@ added_files = [
     # Konfigürasyon
     ('config.ini', '.'),
     
+    # Arayüz çevirileri (olmazsa EXE'de tüm metinler anahtar olarak görünür)
+    ('lang', 'lang'),
+    
     # Veri ve log klasörleri (boş olarak)
     ('data_storage/.gitkeep', 'data_storage'),
     ('logs/.gitkeep', 'logs'),
@@ -70,10 +73,9 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[
         # Gereksiz büyük modülleri çıkar
-        'matplotlib',
-        'scipy',
-        'pandas',
-        'PIL',
+        # Not: scipy (scikit-learn bağımlılığı), pandas (Excel içe aktarma) ve
+        # matplotlib (dashboard grafikleri) uygulamada kullanılıyor; hariç tutulmamalı.
+        # matplotlib dashboard grafikleri için gerekli (PIL de onun bağımlılığı)
         'cv2',
         'tensorflow',
         'torch',
@@ -102,7 +104,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,  # UPX sıkıştırma (boyutu küçültür)
+    upx=False,  # UPX numpy/sklearn DLL'lerini bozabiliyor ve antivirüs yanlış alarmlarını artırıyor
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,  # Konsol penceresi gösterme (windowed)

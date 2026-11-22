@@ -62,7 +62,18 @@
         "no_insights": "No insights yet.",
         "monthly_chart_title": "Monthly Formulation",
         "status_chart_title": "Status Distribution",
-        "chart_y_axis": "Count"
+        "chart_y_axis": "Count",
+        "insight_start_title": "Getting started",
+        "insight_start": "Create a project with \"New Project\" on the left, then enter recipes in the Raw Materials and Formulations tabs.",
+        "insight_pending_title": "Formulas awaiting tests",
+        "insight_pending": "{count} formulations have no test results yet.",
+        "insight_best_title": "Best result",
+        "insight_best": "{code} has the highest quality score ({score}).",
+        "insight_materials_title": "Incomplete material data",
+        "insight_materials": "{count} materials are missing physical properties. Filling them improves ML predictions.",
+        "insight_ml_title": "Data for the ML model",
+        "insight_ml": "Model training needs at least 3 test results (current: {count}).",
+        "tested": "Tested"
     },
     "status": {
         "ready": "Ready",

@@ -32,6 +32,29 @@ from src.data_handlers.local_db_manager import LocalDBManager
 from src.utils.network_checker import NetworkChecker
 
 
+def configure_windows() -> None:
+    """Windows'a özgü ayarlar (diğer platformlarda hiçbir şey yapmaz).
+
+    - DPI farkındalığı: olmazsa yüksek çözünürlüklü/ölçekli ekranlarda arayüz bulanık görünür.
+      Tk penceresi oluşturulmadan ÖNCE çağrılmalıdır.
+    - AppUserModelID: görev çubuğunda uygulamanın python.exe yerine kendi adıyla gruplanması.
+    """
+    if sys.platform != 'win32':
+        return
+    import ctypes
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)  # Windows 8.1+
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()  # Windows 7/8
+        except Exception:
+            pass
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('PaintFormulationAI.Desktop')
+    except Exception:
+        pass
+
+
 def setup_logging(config: ConfigParser) -> logging.Logger:
     """Loglama sistemini yapılandır"""
     log_dir = os.path.join(APP_DIR, 'logs')
@@ -40,13 +63,21 @@ def setup_logging(config: ConfigParser) -> logging.Logger:
     log_level = config.get('Logging', 'level', fallback='INFO')
     log_file = os.path.join(log_dir, f'app_{datetime.now().strftime("%Y%m%d")}.log')
     
+    handlers = [logging.FileHandler(log_file, encoding='utf-8')]
+    # Konsolsuz (windowed) EXE'de sys.stderr None'dır. Windows konsolu (cp857/cp1254)
+    # emoji yazamaz; karakter hatası log satırını düşürmesin diye 'replace' kullan.
+    if sys.stderr is not None:
+        if hasattr(sys.stderr, 'reconfigure'):
+            try:
+                sys.stderr.reconfigure(errors='replace')
+            except Exception:
+                pass
+        handlers.append(logging.StreamHandler())
+
     logging.basicConfig(
         level=getattr(logging, log_level),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file, encoding='utf-8'),
-            logging.StreamHandler()
-        ]
+        handlers=handlers
     )
     
     return logging.getLogger('PaintFormulationAI')
@@ -112,6 +143,8 @@ def main():
     logger.info(f"Sürüm: {config.get('Application', 'version', fallback='1.0.0')}")
     logger.info("=" * 50)
     
+    configure_windows()
+
     try:
         # Dizinleri kontrol et/oluştur
         setup_directories(APP_DIR)
@@ -137,11 +170,24 @@ def main():
             app_dir=APP_DIR
         )
         
+        # Arayüz geri çağrılarındaki hatalar varsayılan olarak stderr'e yazılır; konsolsuz
+        # EXE'de kaybolmasınlar diye log dosyasına yönlendir.
+        app.root.report_callback_exception = lambda exc, val, tb: logger.error(
+            f"Arayüz hatası: {val}", exc_info=(exc, val, tb))
+
         # Uygulamayı çalıştır
         app.run()
         
     except Exception as e:
         logger.error(f"Kritik hata: {str(e)}", exc_info=True)
+        # Konsolsuz EXE'de kullanıcı aksi halde hiçbir şey görmeden uygulama kapanır
+        try:
+            from tkinter import messagebox
+            messagebox.showerror(
+                "Paint Formulation AI",
+                f"Uygulama başlatılamadı:\n\n{e}\n\nAyrıntılar: {os.path.join(APP_DIR, 'logs')}")
+        except Exception:
+            pass
         raise
     finally:
         logger.info("Uygulama kapatılıyor...")

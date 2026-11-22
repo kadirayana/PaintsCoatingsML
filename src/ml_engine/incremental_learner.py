@@ -141,7 +141,7 @@ class IncrementalLearner:
         """Load model registry from disk."""
         if os.path.exists(self.registry_path):
             try:
-                with open(self.registry_path, 'r') as f:
+                with open(self.registry_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     for target, versions in data.items():
                         self._registry[target] = [
@@ -161,7 +161,7 @@ class IncrementalLearner:
                 target: [v.to_dict() for v in versions]
                 for target, versions in self._registry.items()
             }
-            with open(self.registry_path, 'w') as f:
+            with open(self.registry_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)
         except Exception as e:
             logger.error(f"Failed to save model registry: {e}")

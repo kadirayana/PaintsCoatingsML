@@ -404,7 +404,7 @@ def apply_dark_theme(root: tk.Tk) -> ttk.Style:
     style.configure('TNotebook.Tab',
         background=COLORS['bg_secondary'],
         foreground=COLORS['text_secondary'],
-        padding=(16, 8),
+        padding=(10, 6),
         font=FONTS['default'],
         borderwidth=0
     )

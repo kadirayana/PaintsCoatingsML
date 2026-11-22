@@ -62,7 +62,18 @@
         "no_insights": "Henüz içgörü yok.",
         "monthly_chart_title": "Aylık Formülasyon",
         "status_chart_title": "Durum Dağılımı",
-        "chart_y_axis": "Adet"
+        "chart_y_axis": "Adet",
+        "insight_start_title": "Başlarken",
+        "insight_start": "Soldaki \"Yeni Proje\" ile bir proje oluşturun, ardından Hammaddeler ve Formülasyonlar sekmelerinden reçete girin.",
+        "insight_pending_title": "Test bekleyen formüller",
+        "insight_pending": "{count} formülasyonun test sonucu henüz girilmedi.",
+        "insight_best_title": "En iyi sonuç",
+        "insight_best": "{code} kalite skoru {score} ile en yüksek sonuca sahip.",
+        "insight_materials_title": "Eksik hammadde bilgisi",
+        "insight_materials": "{count} hammaddenin fiziksel özellikleri eksik. Doldurmak ML tahminlerini iyileştirir.",
+        "insight_ml_title": "ML modeli için veri",
+        "insight_ml": "Model eğitimi için en az 3 test sonucu gerekli (mevcut: {count}).",
+        "tested": "Test edildi"
     },
     "status": {
         "ready": "Hazır",

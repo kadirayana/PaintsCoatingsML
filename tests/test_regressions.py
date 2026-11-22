@@ -85,5 +85,6 @@ def test_dashboard_stats_count_active_variations(temp_db, sample_project):
 
     stats = temp_db.get_dashboard_stats()
 
-    assert stats == {'total_formulas': 2, 'added_this_month': 2, 'pending_tests': 1, 'successful_tests': 1}
+    assert stats == {'total_formulas': 2, 'added_this_month': 2, 'pending_tests': 1,
+                     'successful_tests': 1, 'tested': 1}
     assert [f['formula_code'] for f in temp_db.get_formulations_without_trials()] == ['B']

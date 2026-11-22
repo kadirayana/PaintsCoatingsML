@@ -1,0 +1,2 @@
+# Windows betikleri CRLF olmalı (LF ile cmd.exe etiketleri/goto hatalı çalışabilir)
+*.bat text eol=crlf

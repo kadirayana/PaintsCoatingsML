@@ -291,6 +291,9 @@ if concept:
     check('Konsept seçimi karşılaştırmayı açtı', app.notebook.index(app.notebook.select()) == 5)
     rows = app.comparison_panel.tree.get_children() if hasattr(app.comparison_panel, 'tree') else []
     check('Karşılaştırma tablosu doldu', len(rows) > 5, f'{len(rows)} satır')
+    app.comparison_panel.load_concept(concept[0]['id'])
+    tables = [w for w in app.comparison_panel.tree_frame.winfo_children() if w.winfo_class() == 'Treeview']
+    check('Tekrar yükleme tabloyu çoğaltmadı', len(tables) == 1, f'{len(tables)} tablo')
 tid = q("SELECT id FROM trials WHERE trial_code = 'IC-004'")[0]['id']
 app.sidebar.tree.selection_set(f't_{tid}')
 app.sidebar._on_select(None)
@@ -337,6 +340,14 @@ for card in (TK.DASHBOARD_STATS_TOTAL, TK.DASHBOARD_STATS_MONTHLY, TK.DASHBOARD_
              TK.DASHBOARD_STATS_SUCCESS):
     app._on_dashboard_navigate(card)
     pump(0.1)
+check('Dashboard kartı sayıyı gösteriyor',
+      app.dashboard.stat_cards[TK.DASHBOARD_STATS_TOTAL].value_label.cget('text') == '7',
+      app.dashboard.stat_cards[TK.DASHBOARD_STATS_TOTAL].value_label.cget('text'))
+check('Ağaçta test sonucu simgesi var', any('✅' in s or '❌' in s for s in (
+    app.sidebar.tree.item(i, 'text') for c in app.sidebar.tree.get_children(f'p_{PID}')
+    for i in app.sidebar.tree.get_children(c))))
+check('Dashboard içgörüleri gösteriliyor', len(app.dashboard.insight_content.winfo_children()) >= 2,
+      str(len(app.dashboard.insight_content.winfo_children())))
 check('Dashboard kartları liste açıyor', len(opened) == 4 and opened[0][1] == 7, str(opened))
 check('Dashboard kartı hata vermedi', not app.status_bar.status_label.cget('text').startswith('Hata')
       if hasattr(app.status_bar, 'status_label') else True)
@@ -371,6 +382,20 @@ pump()
 # ---------------------------------------------------------------- Sonuç
 pump(0.5)
 check('Arayüz geri çağrılarında yakalanmamış hata yok', not CALLBACK_ERRORS, '\n'.join(CALLBACK_ERRORS)[:1500])
+shot_dir = os.environ.get('HARNESS_SHOT_DIR')
+if shot_dir:  # isteğe bağlı: sekmelerin ekran görüntüleri (ImageMagick 'import' gerekir)
+    import subprocess
+    root.geometry('1400x880+0+0')
+    app.sidebar.tree.item(f'p_{PID}', open=True)
+    for child in app.sidebar.tree.get_children(f'p_{PID}'):
+        app.sidebar.tree.item(child, open=True)
+    for idx, name in ((0, 'dashboard'), (3, 'test_results'), (5, 'comparison')):
+        app.notebook.select(idx)
+        if name == 'comparison' and concept:
+            app.comparison_panel.load_concept(concept[0]['id'])
+        pump(1.0)
+        subprocess.run(['import', '-window', 'root', os.path.join(shot_dir, f'{name}.png')])
+
 failed = [r for r in RESULTS if not r[1]]
 print(f'\n{len(RESULTS) - len(failed)}/{len(RESULTS)} adım geçti')
 root.destroy()

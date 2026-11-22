@@ -239,6 +239,7 @@ class DashboardPanel(ttk.LabelFrame, I18nMixin):
         card = ttk.Frame(parent, relief="raised", borderwidth=1, padding=10)
         
         value_label = ttk.Label(card, text=value, font=("Helvetica", 24, "bold"))
+        card.value_label = value_label
         value_label.pack()
         
         name_label = ttk.Label(card, text=t(label), font=("Helvetica", 10))
@@ -281,15 +282,17 @@ class DashboardPanel(ttk.LabelFrame, I18nMixin):
             monthly_data: Aylık veri listesi [{'month': 'YYYY-MM', 'count': N}, ...]
             insights: İçgörü listesi [{'type': 'info', 'title': '...', 'message': '...'}, ...]
         """
-        # Kartları güncelle
-        for label, card in self.stat_cards.items():
-            if label in stats:
-                for widget in card.winfo_children():
-                    if isinstance(widget, ttk.Label):
-                        font = widget.cget('font')
-                        if 'bold' in str(font):
-                            widget.config(text=str(stats[label]))
-                            break
+        # Kartları güncelle (kartlar çeviri anahtarıyla, istatistikler nötr anahtarla tutuluyor)
+        stat_for_card = {
+            TK.DASHBOARD_STATS_TOTAL: 'total_formulas',
+            TK.DASHBOARD_STATS_MONTHLY: 'added_this_month',
+            TK.DASHBOARD_STATS_WAITING: 'pending_tests',
+            TK.DASHBOARD_STATS_SUCCESS: 'successful_tests',
+        }
+        for card_key, card in self.stat_cards.items():
+            stat_key = stat_for_card.get(card_key)
+            if stat_key in stats:
+                card.value_label.config(text=str(stats[stat_key]))
         
         # Grafikleri güncelle
         if self.has_matplotlib:
@@ -373,20 +376,24 @@ class DashboardPanel(ttk.LabelFrame, I18nMixin):
             
             # Sağ grafik - Durum dağılımı
             self.ax2.clear()
-            tested = max(1, int(stats.get('successful', stats.get('Başarılı', 0)) or 0))
-            waiting = max(1, int(stats.get('waiting_test', stats.get('Test Bekleyen', 0)) or 0))
-            total = int(stats.get('total_formulas', stats.get('Toplam Formül', 0)) or 0)
-            draft = max(1, total - tested - waiting)
-            
-            sizes = [tested, waiting, draft]
-            # Mapping status keys to translations
-            categories = [t(TK.DASHBOARD_STATS_SUCCESS), t(TK.DASHBOARD_STATS_WAITING), t(TK.FORM_SAVED_FORMULAS)] # "Taslak" as Formulation
-            colors = ['#4CAF50', '#FFC107', '#9E9E9E']
-            
-            self.ax2.pie(
-                sizes, labels=categories, colors=colors, autopct='%1.0f%%',
-                textprops={'color': 'white', 'fontsize': 8}
-            )
+            # get_dashboard_stats anahtarları: successful_tests / pending_tests
+            success = int(stats.get('successful_tests', 0) or 0)
+            other = int(stats.get('tested', success) or 0) - success  # test edildi, skor < 70
+            waiting = int(stats.get('pending_tests', 0) or 0)
+            parts = [(success, t(TK.DASHBOARD_STATS_SUCCESS), '#4CAF50'),
+                     (other, t(TK.DASHBOARD_TESTED), '#2196F3'),
+                     (waiting, t(TK.DASHBOARD_STATS_WAITING), '#FFC107')]
+            parts = [p for p in parts if p[0] > 0]
+            if parts:
+                self.ax2.pie(
+                    [p[0] for p in parts], labels=[p[1] for p in parts],
+                    colors=[p[2] for p in parts], autopct='%1.0f%%',
+                    textprops={'color': 'white', 'fontsize': 8}
+                )
+            else:
+                # Veri yokken sahte oranlar çizme
+                self.ax2.text(0.5, 0.5, '—', ha='center', va='center', color='white', fontsize=14)
+                self.ax2.set_axis_off()
             self.ax2.set_title(t(TK.DASHBOARD_CHART_STATUS), fontsize=10, color='white')
             
             self.fig.tight_layout()

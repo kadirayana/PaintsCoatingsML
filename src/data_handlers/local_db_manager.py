@@ -1003,7 +1003,8 @@ class LocalDBManager:
                     t.trial_date,
                     t.total_cost,
                     t.quality_score,
-                    t.notes as trial_notes
+                    t.notes as trial_notes,
+                    t.result as trial_result
                 FROM projects p
                 LEFT JOIN parent_formulations pf ON p.id = pf.project_id 
                     AND (pf.is_deleted = 0 OR pf.is_deleted IS NULL)
@@ -1056,7 +1057,8 @@ class LocalDBManager:
                             'trial_date': row['trial_date'],
                             'total_cost': row['total_cost'],
                             'quality_score': row['quality_score'],
-                            'notes': row['trial_notes']
+                            'notes': row['trial_notes'],
+                            'result': row['trial_result'] or ''
                         })
             
             # Convert dicts to lists for output
@@ -1395,6 +1397,8 @@ class LocalDBManager:
             base = 'SELECT COUNT(*) as c ' + self._ACTIVE_TRIAL_JOIN + ' WHERE ' + self._ACTIVE_TRIAL_SQL
             total = cursor.execute(base).fetchone()['c']
             tested = cursor.execute(base + ' AND t.quality_score IS NOT NULL').fetchone()['c']
+            # Başarılı = kalite skoru >= 70 (ağaçtaki ✅ ile aynı kural)
+            successful = cursor.execute(base + ' AND t.quality_score >= 70').fetchone()['c']
             this_month = cursor.execute(
                 base + " AND strftime('%Y-%m', COALESCE(t.created_at, t.trial_date))"
                        " = strftime('%Y-%m', 'now')").fetchone()['c']
@@ -1402,7 +1406,8 @@ class LocalDBManager:
                 'total_formulas': total,
                 'added_this_month': this_month,
                 'pending_tests': max(0, total - tested),
-                'successful_tests': tested
+                'successful_tests': successful,
+                'tested': tested
             }
 
     def get_monthly_formulation_counts(self) -> List[Dict]:
@@ -1417,8 +1422,24 @@ class LocalDBManager:
                 " GROUP BY month ORDER BY month ASC")
             return [{'month': row['month'], 'count': row['count']} for row in cursor.fetchall()]
 
-    def get_dashboard_insights(self) -> List[str]:
-        return ["Sistem başarıyla başlatıldı."]
+    def get_dashboard_insights(self) -> Dict:
+        """Dashboard içgörüleri için ham veriler (metinleştirme arayüzde, dile göre yapılır)"""
+        with self.get_connection() as conn:
+            projects = conn.execute('SELECT COUNT(*) FROM projects WHERE is_active = 1').fetchone()[0]
+            best = conn.execute(
+                'SELECT t.trial_code, t.quality_score ' + self._ACTIVE_TRIAL_JOIN +
+                ' WHERE ' + self._ACTIVE_TRIAL_SQL + ' AND t.quality_score IS NOT NULL'
+                ' ORDER BY t.quality_score DESC LIMIT 1').fetchone()
+            incomplete = conn.execute(
+                'SELECT COUNT(*) FROM materials WHERE is_incomplete = 1').fetchone()[0]
+        stats = self.get_dashboard_stats()
+        return {
+            'projects': projects,
+            'pending_tests': stats['pending_tests'],
+            'tested': stats['tested'],
+            'best': (best[0], best[1]) if best else None,
+            'incomplete_materials': incomplete,
+        }
     
     def _list_active_trials(self, extra_where: str = '') -> List[Dict]:
         """Dashboard listeleri için aktif varyasyonlar (dialoglar formula_code/name bekler)"""
