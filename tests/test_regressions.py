@@ -88,3 +88,16 @@ def test_dashboard_stats_count_active_variations(temp_db, sample_project):
     assert stats == {'total_formulas': 2, 'added_this_month': 2, 'pending_tests': 1,
                      'successful_tests': 1, 'tested': 1}
     assert [f['formula_code'] for f in temp_db.get_formulations_without_trials()] == ['B']
+
+
+def test_additive_subtypes_count_as_additives():
+    """Hammadde formundaki defoamer/thickener... kategorileri ML'de katkı sayılmalı"""
+    from src.ml_engine.recipe_transformer import RecipeTransformer
+    tr = RecipeTransformer()
+    recipe = [{'material_category': 'binder', 'amount': 90},
+              {'material_category': 'defoamer', 'amount': 5},
+              {'material_category': 'thickener', 'amount': 5}]
+
+    features = dict(zip(tr.get_feature_names(), tr.transform(recipe)))
+
+    assert abs(features['total_additive_ratio'] - 0.10) < 1e-9

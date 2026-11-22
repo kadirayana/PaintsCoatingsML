@@ -55,22 +55,23 @@ Built with Python and Tkinter, this tool helps reduce development cycles by inte
 
 ### 🚀 Installation & Setup
 
-1. **Prerequisites:** Python 3.10 or higher (Windows 10/11 recommended).
-2. **Clone the repository:**
-   ```bash
-   git clone https://github.com/kadirayana/PaintsCoatingsML.git
-   cd PaintsCoatingsML
-   ```
-3. **Setup Virtual Environment:**
-   ```bash
-   python -m venv venv
-   venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-4. **Run the Application:**
-   ```bash
-   python app/main.py
-   ```
+**Windows (recommended):** install [Python 3.10+](https://www.python.org/downloads/) with
+"Add python.exe to PATH", run `scripts\setup_windows.bat` once, then start the app with
+`scripts\run_windows.bat`. To build a single-file EXE run `scripts\build_exe_windows.bat`
+(output: `dist\PaintFormulationAI.exe`; run it from a writable folder, not `Program Files`).
+
+**Manual (any platform):**
+```bash
+python -m venv venv
+venv\Scripts\activate          # Linux/macOS: source venv/bin/activate
+pip install -r requirements.txt
+python app/main.py
+```
+
+**Workflow:** Project → Concept (formula name) → Variation (formula code) → recipe + test results.
+Every save retrains the model in the background on recipe composition → test results (needs ≥ 3 tested
+variations); the Optimization tab then suggests recipes for target properties. See the Turkish section
+for a step-by-step guide.
 
 ---
 
@@ -115,22 +116,52 @@ Python ve Tkinter kullanılarak geliştirilen bu araç, fiziksel testlerden önc
 
 ### 🚀 Kurulum
 
-1. **Gereksinimler:** Python 3.10 veya üzeri (Windows 10/11 önerilir).
-2. **Projeyi Klonlayın:**
-   ```bash
-   git clone https://github.com/kadirayana/PaintsCoatingsML.git
-   cd PaintsCoatingsML
-   ```
-3. **Sanal Ortamı Kurun:**
-   ```bash
-   python -m venv venv
-   venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-4. **Uygulamayı Çalıştırın:**
-   ```bash
-   python app/main.py
-   ```
+#### Windows (önerilen)
+
+1. [Python 3.10+](https://www.python.org/downloads/) kurun; kurulumda **"Add python.exe to PATH"** seçeneğini işaretleyin.
+2. Projeyi indirin (`git clone https://github.com/kadirayana/PaintsCoatingsML.git` veya GitHub'dan ZIP).
+3. `scripts\setup_windows.bat` dosyasına çift tıklayın (bir kez; sanal ortamı kurar ve bağımlılıkları yükler).
+4. Uygulamayı `scripts\run_windows.bat` ile başlatın.
+
+**Tek dosya EXE:** `scripts\build_exe_windows.bat` → `dist\PaintFormulationAI.exe`. EXE ilk açılışta yanına
+`data_storage`, `logs` ve `assets` klasörlerini oluşturur; bu yüzden yazma izni olan bir klasörde (ör. Belgeler)
+çalıştırın, `Program Files` içinde değil. Hata durumunda ayrıntılar `logs\` klasöründedir.
+
+#### Elle kurulum (tüm platformlar)
+
+```bash
+python -m venv venv
+venv\Scripts\activate          # Linux/macOS: source venv/bin/activate
+pip install -r requirements.txt
+python app/main.py
+```
+
+### 🧭 Uygulama Nasıl Çalışır
+
+Veriler şu hiyerarşide tutulur: **Proje → Konsept → Varyasyon → Reçete + Test sonuçları**
+
+1. **Proje oluşturun:** Sol paneldeki "Yeni Proje" ya da editördeki proje butonu.
+2. **Hammaddeleri girin** (Hammaddeler sekmesi): kategori, birim fiyat ve varsa fiziksel/kimyasal özellikler
+   (OH değeri, Tg, yağ absorpsiyonu…). Özellikler ne kadar dolu olursa ML o kadar iyi öğrenir.
+3. **Formülasyon kaydedin** (Formülasyonlar sekmesi): proje seçin, **formül adı = konsept**, **formül kodu =
+   varyasyon**. Aynı adla kaydedilen kodlar aynı konseptin varyasyonlarıdır. Aynı kodu tekrar kaydederken
+   üzerine yazmayı veya yeni revizyon (`-REV1`) açmayı seçebilirsiniz. Sol ağaçta bir konsepte sağ tıklayıp
+   "Yeni Varyasyon" ile o konsepte hazır başlayabilirsiniz.
+4. **Test sonuçlarını girin** (Test Sonuçları sekmesi): formül kodunu seçip ölçümleri yazın. Kalite skoru
+   otomatik hesaplanır; skor ≥ 70 ✅, < 50 ❌ olarak ağaçta görünür.
+5. **ML otomatik öğrenir:** Her kayıttan sonra model arka planda, reçete bileşimi (bağlayıcı/pigment oranı,
+   P/B, katı madde…) → test sonuçları ilişkisini öğrenir. En az 3 test sonucu gerekir.
+6. **Karşılaştırma:** Ağaçta bir konsepte tıklayın; varyasyonların reçete ve sonuçları yan yana, farklar
+   vurgulu gösterilir.
+7. **Optimizasyon:** Hedef değerleri (parlaklık, maliyet…) seçin; genetik algoritma eğitilmiş modelle
+   uygun reçeteler önerir. "Bu Reçeteyi Uygula" ile editöre aktarıp kaydedebilirsiniz.
+
+### 🧪 Testler
+
+```bash
+pytest                                  # birim testleri
+python tests/workflow_harness.py        # arayüzü baştan sona süren akış testi (ekran gerekir)
+```
 
 ---
 

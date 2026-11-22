@@ -23,6 +23,9 @@ class RecipeTransformer:
     """
     
     # Çıktı özellik isimleri
+    # Hammadde formundaki katkı alt türleri (material_panel.CATEGORIES) katkı sayılır
+    ADDITIVE_TYPES = {'defoamer', 'thickener', 'dispersant', 'drier', 'biocide'}
+
     FEATURE_NAMES = [
         # Ana Gruplar (Toplam %)
         'total_binder_ratio',
@@ -130,7 +133,7 @@ class RecipeTransformer:
                 weighted_sums['boiling_point'] += (item.get('boiling_point') or 0) * ratio
                 weighted_sums['evaporation_rate'] += (item.get('evaporation_rate') or 0) * ratio
                 
-            elif 'additive' in cat:
+            elif 'additive' in cat or cat in self.ADDITIVE_TYPES:
                 cat_sums['additive'] += ratio
             
             # Katı madde (Varsayılan: Solvent %0, Diğerleri %100 katı gibi basit yaklaşım

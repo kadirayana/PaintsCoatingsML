@@ -142,6 +142,23 @@ app._on_material_list_change()
 pump()
 check('Hammaddeler eklendi', len(db.get_all_materials()) == 5)
 
+# Hammadde formu üzerinden ekleme (kullanıcı akışı)
+mp = app.material_panel
+mp._new_material()
+mp.entries['name'].set('Antiköpük X')
+mp.entries['category'].set('defoamer')
+mp._on_category_changed()
+mp.entries['code'].set('D-600')
+mp.entries['unit_price'].set('55')
+DIALOGS.clear()
+mp._save_material()
+pump()
+saved = db.get_material_by_code('D-600')
+check('Hammadde formu kaydetti', saved and saved['category'] == 'defoamer' and saved['unit_price'] == 55,
+      str(saved))
+check('Hammadde listesinde görünüyor', any('Antiköpük X' in str(mp.material_tree.item(i, 'values'))
+                                           for i in mp.material_tree.get_children()))
+
 
 # ---------------------------------------------------------------- 3. Formülasyonlar
 @step('Formülasyon kaydı')
@@ -270,6 +287,15 @@ check('Arka plan eğitimi model üretti', 'gloss' in learner.models, str(list(le
 imp = learner.get_feature_importance().get('gloss', {}) if learner.models else {}
 recipe_imp = sum(v for k, v in imp.items() if k not in ('viscosity', 'ph', 'density', 'coating_thickness'))
 check('Model reçete özelliklerinden öğreniyor', recipe_imp > 0.5, f'reçete önem toplamı={recipe_imp:.2f}')
+
+# ML Merkezi: eğitim sonucu panele yansıdı mı
+mlp = app.ml_panel
+check('ML Merkezi özellik önemlerini aldı', bool(getattr(mlp, '_feature_importance', None)))
+check('ML Merkezi öğrenilen kuralları üretti', bool(getattr(mlp, '_learned_rules', None)),
+      str(getattr(mlp, '_learned_rules', None)))
+mlp._refresh_global_trends()
+pump()
+check('ML Merkezi genel trendleri yeniden yükleyebiliyor', bool(mlp._feature_importance))
 
 # ---------------------------------------------------------------- 6. Optimizasyon
 res = app._on_generate_recipe({'gloss': 70})
