@@ -770,6 +770,12 @@ class LocalDBManager:
     
     # === FORMÜLASYON İŞLEMLERİ (V2 SCHEMA ADAPTER) ===
     
+    def get_parent_formulation(self, concept_id: int) -> Optional[Dict]:
+        """Konsept (ana formülasyon) kaydı"""
+        with self.get_connection() as conn:
+            row = conn.execute('SELECT * FROM parent_formulations WHERE id = ?', (concept_id,)).fetchone()
+            return dict(row) if row else None
+
     def create_parent_formulation(self, project_id: int, name: str, code: str = None) -> int:
         """Create a generic Parent Formulation (Concept)"""
         with self.get_connection() as conn:
@@ -786,10 +792,10 @@ class LocalDBManager:
         Returns: trial_id
         """
         if not project_id:
-             # Handle default/orphaned
-             pass
-             
-        formula_name = data.get('formula_name', 'Untitled Concept')
+            # Projesiz varyasyon ağaçta/listelerde görünmez ve kaybolur
+            raise ValueError("Formülasyon kaydı için proje seçilmelidir")
+
+        formula_name = data.get('formula_name') or data.get('formula_code') or 'Untitled Concept'
         formula_code = data.get('formula_code', '')
         
         with self.get_connection() as conn:
@@ -818,11 +824,11 @@ class LocalDBManager:
             cursor.execute('''
                 INSERT INTO trials (
                     parent_formulation_id, trial_code, 
-                    trial_date, result, notes, created_by,
-                    viscosity, ph, density, opacity, gloss, 
+                    trial_date, created_at, result, notes, created_by,
+                    viscosity, ph, density, opacity, gloss,
                     quality_score, total_cost, coating_thickness
                 )
-                VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 parent_id, trial_code,
                 data.get('status', 'draft'), data.get('notes', ''), 'User',
@@ -830,18 +836,80 @@ class LocalDBManager:
                 data.get('opacity'), data.get('gloss'), data.get('quality_score'),
                 data.get('total_cost'), data.get('coating_thickness')
             ))
-            trial_id = cursor.lastrowid
-            
-            # Legacy Compatibility
-            try:
-                cursor.execute('''
-                    INSERT INTO formulations (project_id, formula_code, formula_name, status)
-                    VALUES (?, ?, ?, ?)
-                ''', (project_id, formula_code, formula_name, data.get('status', 'draft')))
-            except Exception:
-                pass
+            return cursor.lastrowid
 
-            return trial_id
+    # Aktif varyasyon: silinmemiş varyasyon + silinmemiş konsept + aktif proje
+    # (sorgularda trials t / parent_formulations pf / projects p takma adlarıyla kullanılır)
+    _ACTIVE_TRIAL_SQL = """
+        (t.is_deleted = 0 OR t.is_deleted IS NULL)
+        AND (pf.is_deleted = 0 OR pf.is_deleted IS NULL)
+        AND p.is_active = 1
+    """
+    _ACTIVE_TRIAL_JOIN = """
+        FROM trials t
+        JOIN parent_formulations pf ON t.parent_formulation_id = pf.id
+        JOIN projects p ON pf.project_id = p.id
+    """
+
+    def get_trial_by_code(self, code: str, project_id: Optional[int] = None) -> Optional[Dict]:
+        """Varyasyonu (trial) koduyla bul; project_id verilirse o projeyle sınırla"""
+        sql = ("SELECT t.*, pf.concept_name, pf.project_id " + self._ACTIVE_TRIAL_JOIN +
+               " WHERE t.trial_code = ? AND " + self._ACTIVE_TRIAL_SQL)
+        args = [code]
+        if project_id:
+            sql += " AND pf.project_id = ?"
+            args.append(project_id)
+        sql += " ORDER BY t.id DESC LIMIT 1"
+        with self.get_connection() as conn:
+            row = conn.execute(sql, args).fetchone()
+            return dict(row) if row else None
+
+    def replace_trial_components(self, trial_id: int, components: List[Dict]):
+        """Varyasyonun reçetesini (bileşenlerini) tamamen değiştir"""
+        with self.get_connection() as conn:
+            conn.execute('DELETE FROM components WHERE trial_id = ?', (trial_id,))
+            conn.executemany(
+                'INSERT INTO components (trial_id, component_name, component_type, amount, unit, percentage) '
+                'VALUES (?, ?, ?, ?, ?, ?)',
+                [(trial_id, c['component_name'], c.get('component_type', ''),
+                  c.get('amount', 0), c.get('unit', 'kg'), c.get('percentage', 0))
+                 for c in components])
+
+    def get_trial_columns(self) -> set:
+        with self.get_connection() as conn:
+            return {row[1] for row in conn.execute('PRAGMA table_info(trials)')}
+
+    def ensure_result_columns(self, values: Dict):
+        """
+        Test sonuç anahtarları (ör. gloss_60, hardness_pencil, özel test metodları) için
+        trials tablosunda eksik sütunları oluştur. Sayısal değer → REAL, diğerleri → TEXT.
+        """
+        import re
+        existing = self.get_trial_columns()
+        with self.get_connection() as conn:
+            for key, value in values.items():
+                if key in existing or not re.fullmatch(r'[a-z][a-z0-9_]{0,62}', key):
+                    continue
+                col_type = 'REAL' if isinstance(value, (int, float)) else 'TEXT'
+                conn.execute(f'ALTER TABLE trials ADD COLUMN {key} {col_type}')
+                existing.add(key)
+
+    def update_trial_results(self, trial_id: int, values: Dict):
+        """Varyasyonun sonuç/özellik sütunlarını güncelle (şemada olmayan anahtarlar yok sayılır)"""
+        protected = {'id', 'parent_formulation_id', 'formulation_id', 'trial_code', 'is_deleted'}
+        columns = self.get_trial_columns() - protected
+        fields = {k: v for k, v in values.items() if k in columns}
+        if not fields:
+            return
+        # Sütun adları yalnızca şemadaki gerçek sütunlardan geldiği için güvenli
+        assignments = ', '.join(f'{k} = ?' for k in fields)
+        with self.get_connection() as conn:
+            conn.execute(f'UPDATE trials SET {assignments} WHERE id = ?', [*fields.values(), trial_id])
+
+    def delete_trial(self, trial_id: int):
+        """Varyasyonu yumuşak sil (arayüzden ve ML verisinden kalkar)"""
+        with self.get_connection() as conn:
+            conn.execute('UPDATE trials SET is_deleted = 1 WHERE id = ?', (trial_id,))
 
     def update_formulation(self, formulation_id: int, data: Dict):
         """
@@ -1039,18 +1107,25 @@ class LocalDBManager:
             ''', (formulation_id, formulation_id))
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_recipe_with_properties(self, formulation_id: int) -> List[Dict]:
-        """Get enriched recipe with material properties"""
+    def get_recipe_with_properties(self, trial_id: int) -> List[Dict]:
+        """Varyasyonun reçetesi + hammadde özellikleri (RecipeTransformer girdisi)"""
+        props = ('category', 'oh_value', 'glass_transition', 'molecular_weight', 'solid_content',
+                 'density', 'oil_absorption', 'particle_size', 'boiling_point',
+                 'evaporation_rate', 'unit_price', 'ph')
         with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT c.*, m.category as material_category, m.oh_value, m.glass_transition, 
-                       m.solid_content, m.density
-                FROM components c
-                LEFT JOIN materials m ON c.component_name = m.name
-                WHERE c.trial_id = ? OR c.formulation_id = ?
-            ''', (formulation_id, formulation_id))
-            return [dict(row) for row in cursor.fetchall()]
+            comps = [dict(r) for r in conn.execute(
+                'SELECT component_name AS name, component_type AS code, amount, percentage '
+                'FROM components WHERE trial_id = ? OR formulation_id = ?', (trial_id, trial_id))]
+            for comp in comps:
+                # Önce adla, yoksa kodla hammadde eşleştir
+                mat = conn.execute(
+                    'SELECT * FROM materials WHERE name = ? OR (code IS NOT NULL AND code = ?) '
+                    'ORDER BY (name = ?) DESC LIMIT 1',
+                    (comp['name'], comp['code'], comp['name'])).fetchone()
+                mat = dict(mat) if mat else {}
+                comp.update({k: mat.get(k) for k in props})
+                comp['material_category'] = mat.get('category')
+        return comps
 
     # === DENEME İŞLEMLERİ ===
     
@@ -1074,26 +1149,16 @@ class LocalDBManager:
                   data.get('total_cost'), data.get('notes'), data.get('coating_thickness')))
 
     def get_recent_trials(self, limit: int = 50) -> List[Dict]:
+        """Son varyasyonlar (test geçmişi listesi için)"""
+        sql = ("SELECT t.*, t.trial_code AS formula_code, pf.concept_name AS formula_name, pf.project_id "
+               + self._ACTIVE_TRIAL_JOIN + " WHERE " + self._ACTIVE_TRIAL_SQL +
+               " ORDER BY COALESCE(t.created_at, t.trial_date) DESC LIMIT ?")
         with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT t.*, f.formula_code, f.formula_name
-                FROM trials t
-                LEFT JOIN formulations f ON t.formulation_id = f.id
-                ORDER BY t.trial_date DESC LIMIT ?
-            ''', (limit,))
-            return [dict(row) for row in cursor.fetchall()]
+            return [dict(row) for row in conn.execute(sql, (limit,)).fetchall()]
 
-    def get_latest_trial_by_formula_code(self, formula_code: str) -> Optional[Dict]:
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT t.* FROM trials t
-                JOIN formulations f ON t.formulation_id = f.id
-                WHERE f.formula_code = ? ORDER BY t.trial_date DESC LIMIT 1
-            ''', (formula_code,))
-            row = cursor.fetchone()
-            return dict(row) if row else None
+    def get_latest_trial_by_formula_code(self, formula_code: str, project_id: Optional[int] = None) -> Optional[Dict]:
+        """Test sonuçları ekranı: seçilen formül kodunun varyasyon kaydı (sonuçlarıyla)"""
+        return self.get_trial_by_code(formula_code, project_id)
 
     def get_trial_with_materials(self, trial_id: int) -> Optional[Dict]:
         """
@@ -1275,63 +1340,43 @@ class LocalDBManager:
 
     # === ML VERİLERİ ===
     
-    def get_ml_training_data(self) -> List[Dict]:
+    # === ML EĞİTİM VERİSİ ===
+    # Bir eğitim satırı = test sonucu girilmiş aktif varyasyon + reçetesinden türetilen
+    # özellikler (bağlayıcı/pigment oranı, P/B, katı madde, ağırlıklı OH değeri...).
+    # Reçete özellikleri olmadan model reçete→özellik ilişkisini öğrenemez ve
+    # optimizasyon her reçete için aynı tahmini üretir.
+
+    def _training_rows(self, extra_where: str = '', args: tuple = ()) -> List[Dict]:
+        sql = ("SELECT t.*, pf.project_id " + self._ACTIVE_TRIAL_JOIN +
+               " WHERE " + self._ACTIVE_TRIAL_SQL + " AND t.quality_score IS NOT NULL" + extra_where)
         with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM trials WHERE quality_score IS NOT NULL')
-            return [dict(row) for row in cursor.fetchall()]
+            rows = [dict(row) for row in conn.execute(sql, args).fetchall()]
+        return self._attach_recipe_features(rows)
+
+    def _attach_recipe_features(self, rows: List[Dict]) -> List[Dict]:
+        from src.ml_engine.recipe_transformer import RecipeTransformer
+        transformer = RecipeTransformer()
+        names = transformer.get_feature_names()
+        for row in rows:
+            recipe = self.get_recipe_with_properties(row['id'])
+            if recipe:
+                row.update(zip(names, transformer.transform(recipe)))
+        return rows
+
+    def get_ml_training_data(self) -> List[Dict]:
+        return self._training_rows()
 
     def get_ml_training_data_by_project(self, project_id: int) -> List[Dict]:
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            # User requirement: Count ONLY unique, valid formulations (GROUP BY formulation_id)
-            cursor.execute('''
-                SELECT t.* FROM trials t
-                JOIN formulations f ON t.formulation_id = f.id
-                WHERE f.project_id = ? AND t.quality_score IS NOT NULL
-                GROUP BY t.formulation_id
-            ''', (project_id,))
-            return [dict(row) for row in cursor.fetchall()]
+        return self._training_rows(' AND pf.project_id = ?', (project_id,))
 
     def get_valid_ml_training_data(self) -> List[Dict]:
-        """
-        Get ML training data excluding formulations with incomplete materials.
-        Returns ONE representative trial per formulation (GROUP BY formulation_id).
-        """
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Get formulation IDs that contain incomplete materials
-            cursor.execute('''
-                SELECT DISTINCT fm.formulation_id 
-                FROM formulation_materials fm
-                JOIN materials m ON fm.material_id = m.id
-                WHERE m.is_incomplete = 1
-            ''')
-            incomplete_formulation_ids = {row['formulation_id'] for row in cursor.fetchall()}
-            
-            # Get unique trials (grouped by formulation)
-            # Logic: SELECT COUNT(DISTINCT formulation_id) behavior
-            cursor.execute('''
-                SELECT * FROM trials 
-                WHERE quality_score IS NOT NULL 
-                GROUP BY formulation_id
-            ''')
-            all_trials = [dict(row) for row in cursor.fetchall()]
-            
-            # Filter out trials for formulations with incomplete materials
-            valid_trials = [
-                trial for trial in all_trials 
-                if trial.get('formulation_id') not in incomplete_formulation_ids
-            ]
-            
-            if len(valid_trials) < len(all_trials):
-                logger.info(
-                    f"ML training data: Excluded {len(all_trials) - len(valid_trials)} formulations "
-                    f"with incomplete materials (using {len(valid_trials)} unique formulations)"
-                )
-            
-            return valid_trials
+        """Eksik (özellikleri girilmemiş) hammadde içeren reçeteler hariç eğitim verisi"""
+        return self._training_rows('''
+            AND NOT EXISTS (
+                SELECT 1 FROM components c
+                JOIN materials m ON m.name = c.component_name OR m.code = c.component_type
+                WHERE c.trial_id = t.id AND m.is_incomplete = 1
+            )''')
 
     def save_ml_training_history(self, data: Dict):
         with self.get_connection() as conn:
@@ -1346,19 +1391,13 @@ class LocalDBManager:
         """Dashboard için istatistikleri getir (nötr anahtarlarla)"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT COUNT(*) as c FROM formulations')
-            total = cursor.fetchone()['c']
-            
-            # Count trials that have test results (V2 schema)
-            try:
-                cursor.execute("SELECT COUNT(*) as c FROM trials WHERE quality_score IS NOT NULL")
-                tested = cursor.fetchone()['c']
-            except sqlite3.OperationalError:
-                tested = 0
-            
-            # Count formulas added this month
-            cursor.execute("SELECT COUNT(*) as c FROM formulations WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')")
-            this_month = cursor.fetchone()['c']
+            # Formül = aktif varyasyon (V2 şeması); test edilmiş = kalite skoru olan
+            base = 'SELECT COUNT(*) as c ' + self._ACTIVE_TRIAL_JOIN + ' WHERE ' + self._ACTIVE_TRIAL_SQL
+            total = cursor.execute(base).fetchone()['c']
+            tested = cursor.execute(base + ' AND t.quality_score IS NOT NULL').fetchone()['c']
+            this_month = cursor.execute(
+                base + " AND strftime('%Y-%m', COALESCE(t.created_at, t.trial_date))"
+                       " = strftime('%Y-%m', 'now')").fetchone()['c']
             return {
                 'total_formulas': total,
                 'added_this_month': this_month,
@@ -1370,104 +1409,38 @@ class LocalDBManager:
         """Returns monthly formulation counts for the last 6 months"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                SELECT strftime('%Y-%m', created_at) as month, COUNT(*) as count
-                FROM formulations
-                WHERE created_at >= date('now', '-6 months')
-                GROUP BY strftime('%Y-%m', created_at)
-                ORDER BY month ASC
-            ''')
+            cursor.execute(
+                "SELECT strftime('%Y-%m', COALESCE(t.created_at, t.trial_date)) as month, COUNT(*) as count "
+                + self._ACTIVE_TRIAL_JOIN +
+                " WHERE COALESCE(t.created_at, t.trial_date) >= date('now', '-6 months') AND "
+                + self._ACTIVE_TRIAL_SQL +
+                " GROUP BY month ORDER BY month ASC")
             return [{'month': row['month'], 'count': row['count']} for row in cursor.fetchall()]
 
     def get_dashboard_insights(self) -> List[str]:
         return ["Sistem başarıyla başlatıldı."]
     
+    def _list_active_trials(self, extra_where: str = '') -> List[Dict]:
+        """Dashboard listeleri için aktif varyasyonlar (dialoglar formula_code/name bekler)"""
+        sql = ("SELECT t.*, t.trial_code AS formula_code, pf.concept_name AS formula_name, "
+               "pf.concept_name, pf.project_id, p.name AS project_name "
+               + self._ACTIVE_TRIAL_JOIN + " WHERE " + self._ACTIVE_TRIAL_SQL + extra_where +
+               " ORDER BY COALESCE(t.created_at, t.trial_date) DESC")
+        with self.get_connection() as conn:
+            return [dict(row) for row in conn.execute(sql).fetchall()]
+
     def get_all_formulations(self) -> List[Dict]:
-        """
-        Get all active formulations/trials for 'Total Formulas' dashboard card.
-        Uses trials table as the source (V2 schema).
-        
-        Returns:
-            List of trial dicts
-        """
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute('''
-                    SELECT t.*, pf.concept_name, p.name as project_name
-                    FROM trials t
-                    LEFT JOIN parent_formulations pf ON t.parent_formulation_id = pf.id
-                    LEFT JOIN projects p ON pf.project_id = p.id
-                    WHERE t.is_deleted = 0 OR t.is_deleted IS NULL
-                    ORDER BY COALESCE(t.created_at, t.trial_date) DESC
-                ''')
-                return [dict(row) for row in cursor.fetchall()]
-            except sqlite3.OperationalError as e:
-                # Fallback: simpler query if columns missing
-                logger.warning(f"get_all_formulations fallback due to: {e}")
-                cursor.execute('SELECT * FROM trials WHERE is_deleted = 0 OR is_deleted IS NULL')
-                return [dict(row) for row in cursor.fetchall()]
-    
+        """'Toplam Formül' kartı: tüm aktif varyasyonlar"""
+        return self._list_active_trials()
+
     def get_formulations_this_month(self) -> List[Dict]:
-        """
-        Get formulations created in the current month for 'Added This Month' card.
-        
-        Returns:
-            List of trial dicts created this month
-        """
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute('''
-                    SELECT t.*, pf.concept_name, p.name as project_name
-                    FROM trials t
-                    LEFT JOIN parent_formulations pf ON t.parent_formulation_id = pf.id
-                    LEFT JOIN projects p ON pf.project_id = p.id
-                    WHERE (t.is_deleted = 0 OR t.is_deleted IS NULL)
-                      AND strftime('%Y-%m', COALESCE(t.created_at, t.trial_date)) = strftime('%Y-%m', 'now')
-                    ORDER BY COALESCE(t.created_at, t.trial_date) DESC
-                ''')
-                return [dict(row) for row in cursor.fetchall()]
-            except sqlite3.OperationalError as e:
-                # Fallback: use trial_date only
-                logger.warning(f"get_formulations_this_month fallback due to: {e}")
-                cursor.execute('''
-                    SELECT * FROM trials 
-                    WHERE strftime('%Y-%m', trial_date) = strftime('%Y-%m', 'now')
-                ''')
-                return [dict(row) for row in cursor.fetchall()]
-    
+        """'Bu Ay Eklenen' kartı"""
+        return self._list_active_trials(
+            " AND strftime('%Y-%m', COALESCE(t.created_at, t.trial_date)) = strftime('%Y-%m', 'now')")
+
     def get_formulations_without_trials(self) -> List[Dict]:
-        """
-        Get formulations (trials) that have NO test results yet.
-        For 'Pending Tests' dashboard card.
-        
-        Returns:
-            List of trial dicts without test results
-        """
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute('''
-                    SELECT t.*, pf.concept_name, p.name as project_name
-                    FROM trials t
-                    LEFT JOIN parent_formulations pf ON t.parent_formulation_id = pf.id
-                    LEFT JOIN projects p ON pf.project_id = p.id
-                    LEFT JOIN test_results tr ON t.id = tr.trial_id
-                    WHERE tr.id IS NULL
-                      AND (t.is_deleted = 0 OR t.is_deleted IS NULL)
-                    ORDER BY COALESCE(t.created_at, t.trial_date) DESC
-                ''')
-                return [dict(row) for row in cursor.fetchall()]
-            except sqlite3.OperationalError as e:
-                # Fallback: return trials without quality_score as "pending"
-                logger.warning(f"get_formulations_without_trials fallback due to: {e}")
-                cursor.execute('''
-                    SELECT * FROM trials 
-                    WHERE quality_score IS NULL 
-                      AND (is_deleted = 0 OR is_deleted IS NULL)
-                ''')
-                return [dict(row) for row in cursor.fetchall()]
+        """'Test Bekleyen' kartı: henüz test sonucu (kalite skoru) girilmemiş varyasyonlar"""
+        return self._list_active_trials(" AND t.quality_score IS NULL")
 
     def find_nearest_trial(self, params: Dict) -> Optional[Dict]:
         return None # Basitleştirildi

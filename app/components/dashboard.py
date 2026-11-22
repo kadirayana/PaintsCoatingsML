@@ -72,7 +72,8 @@ class DashboardPanel(ttk.LabelFrame, I18nMixin):
         self.insight_frame.config(text=t(TK.DASHBOARD_INSIGHTS))
         
         # Update placeholder label
-        if hasattr(self, 'no_insights_placeholder'):
+        # Yer tutucu, içgörüler çizilince yok ediliyor; referans kalsa bile widget gitmiş olabilir
+        if hasattr(self, 'no_insights_placeholder') and self.no_insights_placeholder.winfo_exists():
             self.no_insights_placeholder.config(text=t(TK.DASHBOARD_NO_INSIGHTS))
         
         # Update cards

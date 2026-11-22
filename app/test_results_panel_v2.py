@@ -901,7 +901,7 @@ class TestResultsPanelV2(ttk.Frame, I18nMixin):
         
         if 'notes' in data:
             self.notes_text.delete(1.0, tk.END)
-            self.notes_text.insert(tk.END, data['notes'])
+            self.notes_text.insert(tk.END, data['notes'] or '')
         
         self._update_status_cards()
     
@@ -910,20 +910,21 @@ class TestResultsPanelV2(ttk.Frame, I18nMixin):
         self._update_status_cards()
         self._generate_ml_comments()
     
+    def _overall_score(self) -> Optional[float]:
+        """Kategori skorlarının ortalaması (0-100); hiç değer yoksa None"""
+        scores = [score for _, score in (g.calculate_category_score() for g in self.test_groups.values())
+                  if score > 0]
+        return sum(scores) / len(scores) if scores else None
+
     def _update_status_cards(self):
         """Update all status cards"""
-        all_scores = []
-        
         for cat_key, group in self.test_groups.items():
             status, score = group.calculate_category_score()
             self.status_cards[cat_key].set_status(status, score)
-            
-            if score > 0:
-                all_scores.append(score)
         
         # Overall score
-        if all_scores:
-            overall_score = sum(all_scores) / len(all_scores)
+        overall_score = self._overall_score()
+        if overall_score is not None:
             if overall_score >= 70:
                 overall_status = 'good'
             elif overall_score >= 50:
@@ -1010,8 +1011,8 @@ class TestResultsPanelV2(ttk.Frame, I18nMixin):
             messagebox.showwarning(t(TK.common_warning if hasattr(TK, 'common_warning') else TK.WARNING), t(TK.MSG_CHOOSE_FORMULATION))
             return
         
-        if self.on_save:
-            self.on_save(data)
+        # Başarı mesajı yalnızca kayıt gerçekten yapıldıysa
+        if self.on_save and self.on_save(data):
             messagebox.showinfo(t(TK.common_success if hasattr(TK, 'common_success') else TK.SUCCESS), f"✅ {t(TK.MSG_SAVED)}")
     
     def _save_to_ml(self):
@@ -1019,8 +1020,11 @@ class TestResultsPanelV2(ttk.Frame, I18nMixin):
         data = self.get_test_data()
         data['include_in_ml'] = True
         
-        if self.on_save:
-            self.on_save(data)
+        if not self.formulation_combo.get():
+            messagebox.showwarning(t(TK.common_warning if hasattr(TK, 'common_warning') else TK.WARNING), t(TK.MSG_CHOOSE_FORMULATION))
+            return
+        
+        if self.on_save and self.on_save(data):
             messagebox.showinfo(
                 t(TK.ML_CENTER_TITLE),
                 f"✅ {t(TK.MSG_SAVED)}\n\n" + t(TK.MSG_AUTO_ADD_MATERIALS) # Reusing info key or similar
@@ -1063,6 +1067,8 @@ class TestResultsPanelV2(ttk.Frame, I18nMixin):
         for group in self.test_groups.values():
             data['results'].update(group.get_values())
         
+        score = self._overall_score()
+        data['quality_score'] = round(score, 1) if score is not None else None
         return data
     
     def load_formulations(self, formulations: List):

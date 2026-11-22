@@ -11,6 +11,7 @@ Features:
 
 import threading
 import logging
+import queue
 import time
 from typing import Callable, Optional, Any
 from dataclasses import dataclass
@@ -69,6 +70,10 @@ class LearningController:
         
         self._debounce_delay = 0.3  # 300ms debounce
         self._is_training = False
+        # İşçi thread sonuçları buraya koyar; ana thread _poll_results ile alır.
+        # (Tk'ye başka thread'den dokunmak - root.after dahil - güvenli değildir.)
+        self._results = queue.Queue()
+        self._polling = False
         
         self._initialized = True
         logger.info("LearningController initialized")
@@ -77,9 +82,13 @@ class LearningController:
         """
         Set callback for training results.
         
-        Callback will be invoked in the UI thread via tk.after().
+        Callback, ana (UI) thread'de kuyruk yoklamasıyla çağrılır.
+        Bu metod ana thread'den çağrılmalıdır (Tk root ile).
         """
         self._result_callback = callback
+        if self.root and not self._polling:
+            self._polling = True
+            self.root.after(200, self._poll_results)
     
     def trigger_learning(
         self,
@@ -154,17 +163,31 @@ class LearningController:
         
         logger.info(f"Background learning complete: success={result.success}")
         
-        # Invoke UI callback in main thread
+        # UI callback'i ana thread'de çalışsın: sonucu kuyruğa bırak
         if self._result_callback:
             if self.root:
-                # Thread-safe UI update via tk.after()
-                self.root.after(0, lambda: self._result_callback(result))
+                self._results.put(result)
             else:
-                # Direct call (may not be thread-safe for UI)
                 try:
                     self._result_callback(result)
                 except Exception as e:
                     logger.error(f"Result callback error: {e}")
+
+    def _poll_results(self):
+        """Ana thread: biriken eğitim sonuçlarını UI callback'ine ilet"""
+        try:
+            while True:
+                result = self._results.get_nowait()
+                try:
+                    self._result_callback(result)
+                except Exception as e:
+                    logger.error(f"Result callback error: {e}")
+        except queue.Empty:
+            pass
+        try:
+            self.root.after(200, self._poll_results)
+        except Exception:
+            self._polling = False  # pencere kapandı
     
     def is_training(self) -> bool:
         """Check if training is currently in progress"""

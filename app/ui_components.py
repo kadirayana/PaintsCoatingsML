@@ -221,7 +221,8 @@ class PaintFormulationApp(I18nMixin):
 
     def _create_menu(self):
         """Uygulama menüsünü oluştur"""
-        self.menubar = tk.Menu(self.root)
+        # tearoff=0: aksi halde 0. indeks "koparma" satırı olur ve entryconfig(0, label=...) çöker
+        self.menubar = tk.Menu(self.root, tearoff=0)
         self.root.config(menu=self.menubar)
         
         # Dosya Menüsü
@@ -240,11 +241,20 @@ class PaintFormulationApp(I18nMixin):
         self.lang_menu.add_radiobutton(label="Türkçe", variable=self.lang_var, value="tr", command=lambda: self._switch_language("tr"))
         self.lang_menu.add_radiobutton(label="English", variable=self.lang_var, value="en", command=lambda: self._switch_language("en"))
 
+    def _save_config(self):
+        """Kullanıcı tercihlerini (dil vb.) config.ini'ye kalıcı yaz"""
+        try:
+            with open(os.path.join(self.app_dir, 'config.ini'), 'w', encoding='utf-8') as f:
+                self.config.write(f)
+        except OSError as e:
+            logger.warning(f"Ayarlar kaydedilemedi: {e}")
+
     def _switch_language(self, lang: str):
         """Dil değiştir ve konfigürasyona kaydet"""
         from src.core.i18n import switch_language
         if switch_language(lang):
             self.config.set('Application', 'language', lang)
+            self._save_config()
             self._update_texts() # Refresh tab names and menus immediately
 
     
@@ -321,6 +331,11 @@ class PaintFormulationApp(I18nMixin):
             on_create_material=self._on_create_material_from_import
         )
         self.formulation_editor.pack(fill=tk.BOTH, expand=True)
+        # Editördeki proje seçimi = uygulama genelindeki aktif proje
+        self.formulation_editor.project_combo.bind(
+            '<<ComboboxSelected>>', self._on_editor_project_selected, add='+')
+        # Editördeki "Yeni Proje" butonu gerçek proje oluşturma diyaloğunu açsın
+        self.formulation_editor.new_project_btn.config(command=self.sidebar._open_new_project_dialog)
         
         # === SEKME 4: Test Sonuçları (V2 - Decision Support) ===
         from app.test_results_panel_v2 import TestResultsPanelV2
@@ -381,7 +396,6 @@ class PaintFormulationApp(I18nMixin):
             self.active_project_id = item_id
             self.notebook.select(0) # Main Tab
             self.status_bar.update_status(f"{t(TK.FORM_PROJECT)} {t(TK.common_success if hasattr(TK, 'common_success') else TK.SUCCESS)}: ID {item_id}")
-            # TODO: Refresh dashboard for this project
             
         elif item_type == TYPE_CONCEPT:
             # Show Concept Comparison
@@ -397,12 +411,15 @@ class PaintFormulationApp(I18nMixin):
             self.status_bar.set_status(f"{t(TK.FORM_SAVED_FORMULAS)} {t(TK.common_loading if hasattr(TK, 'common_loading') else TK.LOADING)}: ID {item_id}")
             
         elif item_type == "new_trial_request":
-            # Parent ID is passed as item_id
+            # Konsept altında yeni varyasyon: proje + konsept adı (formül adı) hazır gelir,
+            # kayıtta aynı konsepte bağlanır. Kullanıcı yalnızca yeni kodu ve reçeteyi girer.
+            concept = self.db_manager.get_parent_formulation(item_id)
             self.notebook.select(2)  # Formülasyon Tab (Index 2)
             self.formulation_editor._clear_form()
-            # We should set context that we are creating for this parent
-            self.active_project_id = None # Concept linkage handles it?
-            self.formulation_editor.current_parent_id = item_id # TODO: Handle this in editor
+            if concept:
+                self.context.project_id = concept['project_id']
+                self.formulation_editor.formula_name_entry.insert(0, concept['concept_name'])
+            self.formulation_editor.formula_code_entry.focus_set()
             self.status_bar.set_status(t(TK.FORM_NEW_VARIATION))
     
     def _load_initial_data(self):
@@ -674,6 +691,11 @@ class PaintFormulationApp(I18nMixin):
             # Tüm panelleri yenile
             self._refresh_all_panels()
     
+    def _on_editor_project_selected(self, event=None):
+        project = self.db_manager.get_project_by_name(self.formulation_editor.project_combo.get())
+        if project:
+            self.context.project_id = project['id']
+
     def _on_context_changed(self, event: ContextEvent, ctx):
         """
         ProjectContext değişikliklerine tepki ver.
@@ -684,7 +706,12 @@ class PaintFormulationApp(I18nMixin):
         if event == ContextEvent.PROJECT_CHANGED:
             # Proje değişti - tüm panelleri güncelle
             project_name = ctx.project_name or "—"
+            self.active_project_id = ctx.project_id
+            self.active_project_name = ctx.project_name
             self.status_bar.set_status(f"Proje seçildi: {project_name}")
+            if hasattr(self, 'formulation_editor'):
+                self.formulation_editor.set_project(ctx.project_id, ctx.project_name)
+                self.formulation_editor.project_combo.set(ctx.project_name or '')
             
             # Formülasyon editörünü güncelle
             if hasattr(self, 'formulation_editor'):
@@ -742,10 +769,6 @@ class PaintFormulationApp(I18nMixin):
                 else:
                     formulations = self.db_manager.get_active_formulations()
                     self.test_results_panel.load_formulations(formulations)
-            
-            # Optimizasyon panelini güncelle
-            if hasattr(self, 'optimization_panel'):
-                self.optimization_panel.load_projects(projects)
             
             # Dashboard güncelle
             self._refresh_dashboard()
@@ -815,7 +838,7 @@ class PaintFormulationApp(I18nMixin):
         # Sekme 3: Formülasyon (index 2)
         if current_tab == 2 and hasattr(self, 'formulation_editor'):
             # Formülasyon editörüne yükle
-            self.formulation_editor.load_formulation(self.active_formulation_id)
+            self._on_load_detailed_formulation(self.active_formulation_id)
         
         # Sekme 4: Test Sonuçları (index 3)
         elif current_tab == 3 and hasattr(self, 'test_results_panel'):
@@ -911,10 +934,10 @@ class PaintFormulationApp(I18nMixin):
 ═══════════════════════════════════════
 
 📊 İstatistikler:
-  • Toplam Formül: {stats.get('Toplam Formül', 0)}
-  • Bu Ay Eklenen: {stats.get('Bu Ay Eklenen', 0)}
-  • Test Bekleyen: {stats.get('Test Bekleyen', 0)}
-  • Test Edilmiş: {stats.get('Başarılı', 0)}
+  • Toplam Formül: {stats.get('total_formulas', 0)}
+  • Bu Ay Eklenen: {stats.get('added_this_month', 0)}
+  • Test Bekleyen: {stats.get('pending_tests', 0)}
+  • Test Edilmiş: {stats.get('successful_tests', 0)}
 
 ═══════════════════════════════════════
 """
@@ -926,16 +949,16 @@ class PaintFormulationApp(I18nMixin):
     def _on_edit_formulation(self, formulation_id: int):
         """Formülasyonu düzenle - Formülasyon sekmesine yönlendir"""
         self.notebook.select(2)
-        self.status_bar.set_status(f"Formülasyon #{formulation_id} düzenleniyor")
-        # TODO: Formülasyon editörünü bu ID ile doldur
+        self.active_formulation_id = formulation_id
+        self._on_load_detailed_formulation(formulation_id)
     
     def _on_delete_formulation(self, formulation_id: int):
         """Formülasyonu sil"""
         try:
-            self.db_manager.delete_formulation(formulation_id)
+            # Dashboard listeleri varyasyon (trial) kimliği verir
+            self.db_manager.delete_trial(formulation_id)
             self.status_bar.set_status(f"{t(TK.FORM_SAVED_FORMULAS)} #{formulation_id} {t(TK.common_delete if hasattr(TK, 'common_delete') else TK.DELETE)}")
-            # Dashboard güncelle
-            self._refresh_dashboard()
+            self._after_data_change()
         except Exception as e:
             messagebox.showerror(t(TK.common_error if hasattr(TK, 'common_error') else TK.ERROR), f"{t(TK.MSG_ERROR_SAVE)}: {str(e)}")
     
@@ -1324,106 +1347,113 @@ class PaintFormulationApp(I18nMixin):
         self.status_bar.set_status("Tahmin tamamlandı" if result.get('success') else "Tahmin başarısız")
         return result
     
+    def _resolve_project_id(self) -> Optional[int]:
+        """Kayıt için proje: editörde seçili proje, yoksa ağaçta/bağlamda seçili proje"""
+        name = self.formulation_editor.project_combo.get().strip() if hasattr(self, 'formulation_editor') else ''
+        if name:
+            project = self.db_manager.get_project_by_name(name)
+            if project:
+                return project['id']
+        return self.context.project_id or self.active_project_id
+
+    @staticmethod
+    def _grid_rows_to_components(rows: list) -> list:
+        """Editör tablosu satırlarını (material_name/weight...) DB bileşen kayıtlarına çevir"""
+        total = sum(r.get('weight', 0) or 0 for r in rows)
+        return [{
+            'component_name': r.get('material_name') or r.get('material_code', ''),
+            'component_type': r.get('material_code', ''),
+            'amount': r.get('weight', 0) or 0,
+            'percentage': ((r.get('weight', 0) or 0) / total * 100) if total else 0,
+            'unit': 'kg',
+        } for r in rows if (r.get('material_name') or r.get('material_code'))]
+
+    @staticmethod
+    def _next_revision_code(code: str) -> str:
+        import re
+        match = re.match(r"(.*)-REV(\d+)$", code)
+        return f"{match.group(1)}-REV{int(match.group(2)) + 1}" if match else f"{code}-REV1"
+
     def _on_save_formulation(self, data: dict):
-        """Formülasyonu kaydet"""
+        """
+        Editördeki reçeteyi varyasyon (trial) olarak kaydet.
+
+        Model: Proje → Konsept (formül adı) → Varyasyon (formül kodu) → Bileşenler.
+        Aynı projede aynı kod varsa: Evet = üzerine yaz, Hayır = yeni revizyon, İptal.
+        """
         try:
-            formula_code = data.get('formula_code', '')
-            existing = self.db_manager.get_formulation_by_code(formula_code)
-            
-            formulation_id = 0
-            
+            project_id = self._resolve_project_id()
+            if not project_id:
+                messagebox.showwarning(
+                    t(TK.WARNING),
+                    "Formülasyonu kaydetmek için önce bir proje seçin "
+                    "(editördeki proje listesinden veya soldaki proje ağacından).")
+                return False
+
+            formula_code = data.get('formula_code', '').strip()
+            formula_name = data.get('formula_name', '').strip() or formula_code
+            components = self._grid_rows_to_components(data.get('components', []))
+            totals = data.get('totals') or {}
+            quantity = totals.get('total_quantity') or 0
+            # Birim maliyet (TL/kg): ML hedefi ve optimizer ile aynı tanım
+            unit_cost = round(totals.get('total_cost', 0) / quantity, 4) if quantity else None
+
+            existing = self.db_manager.get_trial_by_code(formula_code, project_id)
+            if existing and data.get('is_new_variation'):
+                messagebox.showwarning(t(TK.WARNING), f"'{formula_code}' kodu bu projede zaten kullanılıyor.")
+                return False
+
             if existing:
-                msg = f"'{formula_code}' kodlu bir formülasyon zaten mevcut.\n\n" \
-                      "[Evet]: Mevcut kaydın üzerine yaz\n" \
-                      "[Hayır]: Yeni revizyon oluştur\n" \
-                      "[İptal]: İşlemi iptal et"
-                choice = messagebox.askyesnocancel("Kayıt Çakışması", msg)
-                
-                if choice is None: # İptal
-                    return
-                    
-                if choice: # Evet -> Overwrite
-                    formulation_id = existing['id']
-                    # Başlığı güncelle
-                    self.db_manager.update_formulation(formulation_id, {
-                        'formula_name': data.get('formula_name', ''),
-                        'status': 'draft'
-                    })
-                    # Bileşenleri temizle
-                    self.db_manager.delete_formulation_components(formulation_id)
-                    
-                else: # Hayır -> Revision
-                    # Yeni kod üret
-                    import re
-                    match = re.match(r"(.*)-REV(\d+)$", formula_code)
-                    if match:
-                        base = match.group(1)
-                        rev = int(match.group(2)) + 1
-                        new_code = f"{base}-REV{rev}"
-                    else:
-                        new_code = f"{formula_code}-REV1"
-                    
-                    messagebox.showinfo("Revizyon", f"Yeni revizyon oluşturuluyor: {new_code}")
-                    data['formula_code'] = new_code
-                    
-                    # Create new
-                    formulation_id = self.db_manager.create_formulation(
-                        project_id=None,
-                        data={
-                            'formula_code': new_code,
-                            'formula_name': data.get('formula_name', ''),
-                            'status': 'draft'
-                        }
-                    )
+                choice = messagebox.askyesnocancel(
+                    "Kayıt Çakışması",
+                    f"'{formula_code}' kodlu bir formülasyon zaten mevcut.\n\n"
+                    "[Evet]: Mevcut kaydın üzerine yaz\n"
+                    "[Hayır]: Yeni revizyon oluştur\n"
+                    "[İptal]: İşlemi iptal et")
+                if choice is None:
+                    return False
+                if choice:
+                    trial_id = existing['id']
+                else:
+                    formula_code = self._next_revision_code(formula_code)
+                    while self.db_manager.get_trial_by_code(formula_code, project_id):
+                        formula_code = self._next_revision_code(formula_code)
+                    messagebox.showinfo("Revizyon", f"Yeni revizyon oluşturuluyor: {formula_code}")
+                    trial_id = self.db_manager.create_formulation(
+                        project_id, {'formula_code': formula_code, 'formula_name': formula_name})
             else:
-                # Yeni kayıt
-                formulation_id = self.db_manager.create_formulation(
-                    project_id=None,  # Aktif proje yoksa None
-                    data={
-                        'formula_code': formula_code,
-                        'formula_name': data.get('formula_name', ''),
-                        'status': 'draft'
-                    }
-                )
-            
-            # Bileşenleri kaydet
-            for comp in data.get('components', []):
-                self.db_manager.add_component(formulation_id, {
-                    'component_name': comp.get('name', ''),
-                    'component_type': comp.get('code', ''),
-                    'amount': comp.get('amount', 0), # Total amount
-                    'percentage': comp.get('percentage', 0),
-                    'unit': 'kg'
-                })
-            
-            self.status_bar.set_status(f"Formülasyon kaydedildi: {data.get('formula_code', '')}")
-            
-            # Dashboard güncelle
-            # Dashboard güncelle
-            self._refresh_dashboard()
-            
-            # Güncel formülasyon listesi (only from active projects)
-            formulations = self.db_manager.get_active_formulations()
-            
-            # Test sonuçları panelindeki formülasyon listesini güncelle
-            if hasattr(self, 'test_results_panel'):
-                self.test_results_panel.load_formulations(formulations)
-            
-            # Formülasyon editöründeki dropdown'ı güncelle
-            if hasattr(self, 'formulation_editor'):
-                self.formulation_editor.load_formulation_list(formulations)
-            
-            # Trigger background ML learning
-            self._trigger_background_learning(
-                project_id=self.active_project_id,
-                formulation_data=data
-            )
-            
-            return True  # Indicate success
-            
+                trial_id = self.db_manager.create_formulation(
+                    project_id, {'formula_code': formula_code, 'formula_name': formula_name})
+
+            self.db_manager.replace_trial_components(trial_id, components)
+            self.db_manager.update_trial_results(trial_id, {'total_cost': unit_cost})
+
+            self.active_formulation_id = trial_id
+            self.status_bar.set_status(f"Formülasyon kaydedildi: {formula_code}")
+            self._after_data_change(project_id)
+            self._trigger_background_learning(project_id=project_id, formulation_data=data)
+            return True
+
         except Exception as e:
+            logger.error(f"Formülasyon kaydetme hatası: {e}", exc_info=True)
             self.status_bar.set_status(f"Kaydetme hatası: {str(e)}")
-    
+            messagebox.showerror(t(TK.ERROR), f"Kaydetme başarısız: {e}")
+            return False
+
+    def _after_data_change(self, project_id: Optional[int] = None):
+        """Kayıt/silme sonrası ağaç, listeler ve dashboard'u tek yerden yenile"""
+        if project_id and self.context.project_id != project_id:
+            self.context.project_id = project_id  # PROJECT_CHANGED → listeler yenilenir
+        else:
+            self.context.refresh_formulations()
+            formulations = self.context.formulations if self.context.project_id \
+                else self.db_manager.get_active_formulations()
+            self.formulation_editor.load_formulation_list(formulations)
+            self.test_results_panel.load_formulations(formulations)
+        self.sidebar.refresh()
+        self.test_results_panel.load_history(self.db_manager.get_recent_trials(50))
+        self._refresh_dashboard()
+
     def _on_calculate_formulation(self, data: dict):
         """Formülasyon hesaplama"""
         total_cost = data.get('total_cost', 0)
@@ -1433,40 +1463,52 @@ class PaintFormulationApp(I18nMixin):
             f"Hesaplandı: %{total_percent:.1f} - Toplam Maliyet: {total_cost:.2f} birim"
         )
     
-    def _on_save_test_results(self, data: dict):
-        """Test sonuçlarını kaydet"""
+    # Test ekranı anahtarı → ML/DB'nin kullandığı ortak sütun (ham değer de ayrıca saklanır)
+    TEST_KEY_ALIASES = {
+        'gloss_60': 'gloss',
+        'hardness_konig': 'hardness',
+        'flexibility_erichsen': 'flexibility',
+    }
+
+    def _on_save_test_results(self, data: dict) -> bool:
+        """Test sonuçlarını seçili varyasyonun (trial) kaydına yaz"""
         try:
-            # Trial olarak kaydet
-            trial_data = {
-                'formulation_id': None,
-                'trial_date': data.get('date'),
-                'coating_thickness': data['coating'].get('coating_thickness'),
-                'notes': data.get('notes', '')
-            }
-            
-            # Test sonuçlarını ekle
-            for key, value in data.get('results', {}).items():
-                trial_data[key] = value
-            
-            self.db_manager.save_trial(trial_data)
-            
-            # ML modeli yeni veri ile güncelle (arka planda)
-            self._refresh_dashboard()
-            self.status_bar.set_status(f"Test sonuçları kaydedildi")
-            
-            # Dashboard güncelle
-            stats = self.db_manager.get_dashboard_stats()
-            self.dashboard.update_stats(stats)
-            
-            # Trigger background ML learning with new test data
-            self._trigger_background_learning(
-                project_id=self.active_project_id,
-                formulation_data=trial_data
-            )
-            
+            code = (data.get('formulation') or '').strip()
+            trial = self.db_manager.get_trial_by_code(code, self.context.project_id) \
+                or self.db_manager.get_trial_by_code(code)
+            if not trial:
+                messagebox.showwarning(t(TK.WARNING), f"'{code}' kodlu formülasyon bulunamadı.")
+                return False
+
+            results = dict(data.get('results', {}))
+            for raw_key, column in self.TEST_KEY_ALIASES.items():
+                if raw_key in results and isinstance(results[raw_key], (int, float)):
+                    results[column] = results[raw_key]
+
+            score = data.get('quality_score')
+            if score is not None:
+                results['quality_score'] = score
+                # Ağaçtaki durum simgesi (✅/❌/📈) için özet sonuç
+                results['result'] = 'success' if score >= 70 else ('fail' if score < 50 else 'tested')
+            results['notes'] = data.get('notes', '')
+            if data.get('date'):
+                results['trial_date'] = data['date']
+
+            self.db_manager.ensure_result_columns(results)
+            self.db_manager.update_trial_results(trial['id'], results)
+
+            self.status_bar.set_status(f"Test sonuçları kaydedildi: {code}")
+            self._after_data_change()
+            if data.get('include_in_ml', True):
+                self._trigger_background_learning(project_id=trial.get('project_id'), formulation_data=results)
+            return True
+
         except Exception as e:
+            logger.error(f"Test sonucu kaydetme hatası: {e}", exc_info=True)
             self.status_bar.set_status(f"Kaydetme hatası: {str(e)}")
-    
+            messagebox.showerror(t(TK.ERROR), f"Test sonuçları kaydedilemedi: {e}")
+            return False
+
     def _on_load_formulations(self, project_name: str) -> list:
         """Proje için formülasyonları yükle"""
         try:
@@ -1476,15 +1518,23 @@ class PaintFormulationApp(I18nMixin):
         except Exception as e:
             self.status_bar.set_status(f"Formülasyon yükleme hatası: {str(e)}")
             return []
-    
+
     def _on_load_trial(self, formula_code: str) -> dict:
-        """Formül kodu için mevcut test verilerini yükle"""
+        """Formül kodunun kayıtlı test sonuçlarını test ekranı anahtarlarıyla döndür"""
         try:
-            trial_data = self.db_manager.get_latest_trial_by_formula_code(formula_code)
-            return trial_data
+            trial = self.db_manager.get_trial_by_code(formula_code, self.context.project_id) \
+                or self.db_manager.get_trial_by_code(formula_code)
+            if not trial:
+                return None
+            # Eski kayıtlarda yalnızca ortak sütun dolu olabilir (ör. gloss → gloss_60)
+            for raw_key, column in self.TEST_KEY_ALIASES.items():
+                if trial.get(raw_key) is None and trial.get(column) is not None:
+                    trial[raw_key] = trial[column]
+            return trial
         except Exception as e:
             self.status_bar.set_status(f"Test verisi yükleme hatası: {str(e)}")
             return None
+
     def _on_apply_formulation_from_recommendation(self, result: dict):
         """Önerilen reçeteyi formülasyon editörüne aktar"""
         recipe = result.get('recommended_recipe')

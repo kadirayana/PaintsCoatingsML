@@ -111,8 +111,15 @@ class SidebarNavigator(ttk.Frame, I18nMixin):
         
     def refresh(self):
         """Rebuilds the tree from DB"""
-        # Save selection
-        selected = self.tree.selection()
+        # Açık dalları koru (her kayıttan sonra ağaç yeniden kurulur). Seçim bilerek geri
+        # konmuyor: selection_set <<TreeviewSelect>> tetikler ve kullanıcıyı başka sekmeye atar.
+        opened = set()
+        stack = list(self.tree.get_children())
+        while stack:
+            node = stack.pop()
+            if self.tree.item(node, 'open'):
+                opened.add(node)
+            stack.extend(self.tree.get_children(node))
         
         # Clear
         self.tree.delete(*self.tree.get_children())
@@ -165,6 +172,10 @@ class SidebarNavigator(ttk.Frame, I18nMixin):
                         tags=(tag,),
                         values=(TYPE_TRIAL, trial['id'])
                     )
+
+        for node in opened:
+            if self.tree.exists(node):
+                self.tree.item(node, open=True)
         
     def _on_select(self, event):
         selection = self.tree.selection()
@@ -212,6 +223,8 @@ class SidebarNavigator(ttk.Frame, I18nMixin):
             
         elif item_type == TYPE_TRIAL:
             menu.add_command(label=f"✏️ {t(TK.common_edit if hasattr(TK, 'common_edit') else TK.EDIT)}", command=lambda: self.on_selection_change(TYPE_TRIAL, db_id))
+            menu.add_separator()
+            menu.add_command(label=f"🗑️ {t(TK.common_delete if hasattr(TK, 'common_delete') else TK.DELETE)}", command=lambda: self._delete_item(item_type, db_id))
             
         menu.post(event.x_root, event.y_root)
         
@@ -233,9 +246,23 @@ class SidebarNavigator(ttk.Frame, I18nMixin):
     def _delete_item(self, item_type, item_id):
         if item_type == TYPE_PROJECT:
             if messagebox.askyesno(t(TK.common_confirm if hasattr(TK, 'common_confirm') else TK.CONFIRM), t(TK.MSG_ARE_YOU_SURE)):
-                 # Assuming delete by ID exists or we fetch name
-                 # self.db_manager.delete_project... (Needs update in Manager)
-                 pass
+                project = self.db_manager.get_project(item_id)
+                if project:
+                    # Yumuşak silme: proje pasife alınır, varyasyonları listelerden kalkar
+                    self.db_manager.delete_project_by_name(project['name'])
+                    if self.context is not None and self.context.project_id == item_id:
+                        self.context.project_id = None
+                    self.refresh()
+                    if self.on_project_change:
+                        self.on_project_change()
+        elif item_type == TYPE_TRIAL:
+            if messagebox.askyesno(t(TK.common_confirm if hasattr(TK, 'common_confirm') else TK.CONFIRM), t(TK.MSG_ARE_YOU_SURE)):
+                self.db_manager.delete_trial(item_id)
+                if self.context is not None:
+                    self.context.refresh_formulations()
+                self.refresh()
+                if self.on_project_change:
+                    self.on_project_change()
 
     def load_projects(self, projects=None):
         """Compatibility method for legacy ProjectPanel calls"""
