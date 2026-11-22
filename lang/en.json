@@ -216,7 +216,7 @@
             "are_you_sure": "Are you sure?"
         },
         "info": {
-            "auto_add_raw materials": "New material codes will be automatically added to the database."
+            "auto_add_materials": "New material codes will be automatically added to the database."
         }
     },
     "params": {

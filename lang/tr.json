@@ -216,7 +216,7 @@
             "are_you_sure": "Emin misiniz?"
         },
         "info": {
-            "auto_add_raw materials": "Yeni hammadde kodları otomatik olarak veritabanına eklenecektir."
+            "auto_add_materials": "Yeni hammadde kodları otomatik olarak veritabanına eklenecektir."
         }
     },
     "params": {

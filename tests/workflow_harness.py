@@ -316,6 +316,31 @@ if concept:
 app._refresh_dashboard()
 stats = db.get_dashboard_stats()
 check('Dashboard toplam formül sayısı', stats.get('total_formulas') == 7, str(stats))
+from app.components.dialogs import formulation_list_dialog as fld, trial_list_dialog as tld  # noqa: E402
+opened = []
+fld_orig, tld_orig = fld.FormulationListDialog.__init__, tld.TrialListDialog.__init__
+
+
+def _spy(orig):
+    def init(self, parent, title, items, *a, **k):
+        opened.append((title, len(items)))
+        orig(self, parent, title, items, *a, **k)
+        self.destroy()
+    return init
+
+
+import app.ui_components as uic  # noqa: E402
+uic.FormulationListDialog.__init__ = _spy(fld_orig)
+uic.TrialListDialog.__init__ = _spy(tld_orig)
+from src.core.translation_keys import TK  # noqa: E402
+for card in (TK.DASHBOARD_STATS_TOTAL, TK.DASHBOARD_STATS_MONTHLY, TK.DASHBOARD_STATS_WAITING,
+             TK.DASHBOARD_STATS_SUCCESS):
+    app._on_dashboard_navigate(card)
+    pump(0.1)
+check('Dashboard kartları liste açıyor', len(opened) == 4 and opened[0][1] == 7, str(opened))
+check('Dashboard kartı hata vermedi', not app.status_bar.status_label.cget('text').startswith('Hata')
+      if hasattr(app.status_bar, 'status_label') else True)
+
 DIALOGS.clear()
 app._generate_report()
 report = DIALOGS[-1][1][1] if DIALOGS else ''
