@@ -345,7 +345,7 @@ class DashboardPanel(ttk.LabelFrame, I18nMixin):
             ttk.Label(
                 frame,
                 text=insight.get('message', ''),
-                wraplength=200,
+                wraplength=165,  # dar pencerede panelden taşmasın
                 justify=tk.LEFT
             ).pack(anchor=tk.W, pady=(2, 0))
     
