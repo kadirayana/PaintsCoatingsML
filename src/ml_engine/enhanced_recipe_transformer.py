@@ -325,7 +325,7 @@ class EnhancedRecipeTransformer:
             # Fallback if method doesn't exist
             try:
                 mat = self.db.get_material_by_code(code)
-            except:
+            except Exception:
                 mat = None
         
         self._material_cache[code] = mat

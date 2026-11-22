@@ -197,7 +197,8 @@ class PaintFormulationApp(I18nMixin):
         # Notebook sekmelerini güncelle
         all_tabs = self.notebook.tabs()
         nav_keys = [TK.NAV_DASHBOARD, TK.NAV_MATERIALS, TK.NAV_FORMULATIONS, 
-                    TK.NAV_TEST_RESULTS, TK.NAV_ML_CENTER, TK.NAV_OPTIMIZATION]
+                    TK.NAV_TEST_RESULTS, TK.NAV_ML_CENTER, TK.NAV_OPTIMIZATION,
+                    TK.NAV_RECIPE_OPTIMIZER]
         
         for i, key in enumerate(nav_keys):
             if i < len(all_tabs):
@@ -354,6 +355,18 @@ class PaintFormulationApp(I18nMixin):
         self.notebook.add(comp_tab, text=t(TK.NAV_OPTIMIZATION)) 
         self.comparison_panel = VariationComparisonPanel(comp_tab, self.db_manager)
         self.comparison_panel.pack(fill=tk.BOTH, expand=True)
+
+        # === SEKME 7: Reçete Optimizasyonu (Genetik Algoritma) ===
+        from app.components.optimization_panel import RecipeOptimizationPanel
+        opt_tab = ttk.Frame(self.notebook, padding=10)
+        self.notebook.add(opt_tab, text=t(TK.NAV_RECIPE_OPTIMIZER))
+        self.optimization_panel = RecipeOptimizationPanel(
+            opt_tab,
+            on_generate_recipe=self._on_generate_recipe,
+            on_apply_recipe=self._on_apply_optimization_recipe
+        )
+        self.optimization_panel.pack(fill=tk.BOTH, expand=True)
+        self._refresh_optimization_model_status()
         
         # Status Bar
         self.status_bar = StatusBar(self.root)
@@ -460,15 +473,6 @@ class PaintFormulationApp(I18nMixin):
             self.optimization_panel.load_custom_objectives()
             self.status_bar.set_status("✅ Özel test metodları güncellendi")
     
-    def _on_material_list_change(self):
-        """hammadde listesi değiştiğinde formülasyon editörünü güncelle"""
-        if hasattr(self, 'formulation_editor'):
-            # hammadde listesini yeniden yükle
-            materials = self.db_manager.get_all_materials()
-            if hasattr(self.formulation_editor, 'refresh_materials'):
-                self.formulation_editor.refresh_materials()
-            self.status_bar.set_status("✅ hammadde listesi güncellendi")
-    
     def _on_create_material_from_import(self, code: str, name: str = None) -> bool:
         """
         Callback for on-the-fly material creation during Excel import.
@@ -529,6 +533,8 @@ class PaintFormulationApp(I18nMixin):
                         f"AI Model son formülasyonla güncellendi ({samples} örnek)"
                     )
                 
+                self._refresh_optimization_model_status()
+
                 # Log metrics
                 if result.global_metrics:
                     logger.info(f"Global ML metrics: {result.global_metrics}")
@@ -966,9 +972,9 @@ class PaintFormulationApp(I18nMixin):
                 self.root.after(0, update_ui)
                 
             except Exception as e:
-                def show_error():
-                    self.status_bar.set_status(f"İçe aktarma hatası: {str(e)}")
-                    messagebox.showerror("Hata", f"İçe aktarma başarısız: {str(e)}")
+                def show_error(err=str(e)):
+                    self.status_bar.set_status(f"İçe aktarma hatası: {err}")
+                    messagebox.showerror("Hata", f"İçe aktarma başarısız: {err}")
                 self.root.after(0, show_error)
         
         # Arka plan thread'i başlat
@@ -1297,76 +1303,6 @@ class PaintFormulationApp(I18nMixin):
             return {'success': False, 'message': str(e)}
 
     
-    def _on_optimize(self, objectives: dict, constraints: dict) -> dict:
-        """Çoklu hedef optimizasyon olayı"""
-        from src.ml_engine.continuous_learner import ContinuousLearner
-        from src.ml_engine.optimizer import MLOptimizer
-        
-        # Önce modeli yükle/eğit
-        learner = ContinuousLearner(os.path.join(self.app_dir, 'assets', 'models'))
-        
-        # Model eğitilmemişse eğit
-        if not learner.models:
-            training_data = self.db_manager.get_ml_training_data()
-            train_result = learner.train(training_data)
-            
-            if not train_result.get('success'):
-                return train_result
-        
-        # Optimizer instance oluştur
-        optimizer = MLOptimizer(learner, self.db_manager)
-        
-        # Proje kısıtlarını uygula
-        project_id = self.active_project_id
-        if constraints.get('scope') == 'project' and project_id:
-            try:
-                # Proje detaylarını çek (hedef maliyet vb.)
-                project = self.db_manager.get_project(project_id)
-                if project:
-                    if project.get('target_cost'):
-                         constraints['max_cost'] = float(project['target_cost'])
-                    
-                    # Log
-                    logger.info(f"Proje kısıtları aktif: ID={project_id}, MaxCost={constraints.get('max_cost')}")
-            except Exception as e:
-                logger.error(f"Proje kısıtları uygulanamadı: {e}")
-
-        # hammadde fiyatlarını al
-        material_costs = self.material_panel.get_price_dict() if hasattr(self, 'material_panel') else {}
-        
-        # Optimizasyonu çalıştır (MLOptimizer.optimize kullanmalıyız, learner değil)
-        # NOT: Orijinal kodda learner.optimize_multi_objective kullanılıyordu, ama biz MLOptimizer'ı güncelledik.
-        # Bu yüzden MLOptimizer.optimize çağırmalıyız.
-        
-        try:
-             result = optimizer.optimize(objectives, project_id=project_id, constraints=constraints)
-        except Exception as e:
-             logger.error(f"Optimizasyon hatası: {e}")
-             return {'success': False, 'message': str(e)}
-        
-        # En yakın reçeteyi bul (Active Learning / Inverse Design)
-        if result.get('success'):
-            try:
-                optimal_params = result.get('optimal_params', {})
-                nearest_trial = self.db_manager.find_nearest_trial(optimal_params)
-                
-                if nearest_trial:
-                    result['nearest_trial'] = nearest_trial
-                    
-                    if nearest_trial.get('formulation_id'):
-                        # Reçete detaylarını çek
-                        recipe = self.db_manager.get_formulation_materials(nearest_trial['formulation_id'])
-                        result['recommended_recipe'] = recipe
-                        
-                        # Formülasyon bilgilerini çek
-                        form_info = self.db_manager.get_formulation(nearest_trial['formulation_id'])
-                        result['recommended_formulation'] = form_info
-            except Exception as e:
-                pass  # Öneri hatası ana işlemi durdurmasın
-        
-        self.status_bar.set_status("Optimizasyon tamamlandı" if result.get('success') else "Optimizasyon başarısız")
-        return result
-    
     def _on_predict_test_results(self, params: dict) -> dict:
         """Test sonuçlarını tahmin et"""
         from src.ml_engine.continuous_learner import ContinuousLearner
@@ -1600,6 +1536,19 @@ class PaintFormulationApp(I18nMixin):
     def run(self):
         """Uygulamayı çalıştır"""
         self.root.mainloop()
+    def _refresh_optimization_model_status(self):
+        """Optimizasyon panelindeki model durum etiketini güncelle"""
+        if not hasattr(self, 'optimization_panel'):
+            return
+        try:
+            from src.ml_engine.continuous_learner import ContinuousLearner
+            learner = ContinuousLearner(os.path.join(self.app_dir, 'assets', 'models'))
+            self.optimization_panel.update_model_status(
+                bool(learner.models), learner.training_sample_count
+            )
+        except Exception as e:
+            logger.warning(f"Optimizasyon model durumu alınamadı: {e}")
+
     def _on_generate_recipe(self, targets: dict) -> dict:
         """ML ile reçete optimizasyonu (Genetik Algoritma)
         
@@ -1633,11 +1582,9 @@ class PaintFormulationApp(I18nMixin):
             if not learner.models:
                 return {
                     'success': False,
-                    'message': 'ML modeli eğitilmedi. Lütfen önce "Optimizasyon&ML" sekmesinden modeli eğitin.\n\n'
-                              'Adımlar:\n'
-                              '1. "Optimizasyon&ML" sekmesine gidin\n'
-                              '2. "ML Model Durumu" panelinden projeyi seçin\n'
-                              '3. "Projeyi Eğit" veya "Global Eğit" butonuna basın',
+                    'message': 'ML modeli henüz eğitilmedi. Model, test sonuçları kaydedildikçe '
+                              'arka planda otomatik eğitilir. Lütfen "Test Sonuçları" sekmesinden '
+                              'en az 3 test sonucu girin ve eğitimin tamamlanmasını bekleyin.',
                     'error_code': 'MODEL_NOT_TRAINED'
                 }
             
@@ -1678,27 +1625,9 @@ class PaintFormulationApp(I18nMixin):
         # Formülasyon sekmesine geç
         self.notebook.select(2)  # "Formülasyon" sekmesi (index 2)
         
-        # Formülasyon editörüne bileşenleri aktar
-        try:
-            # Mevcut bileşenleri temizle
-            self.formulation_editor.clear_components()
-            
-            # Yeni bileşenleri ekle
-            for comp in recipe:
-                material_code = comp.get('code', comp.get('id', ''))
-                material_name = comp.get('name', '')
-                amount = comp.get('amount', 0)
-                
-                # Formülasyon editörüne satır ekle
-                self.formulation_editor.add_component_row(
-                    code=str(material_code),
-                    name=material_name,
-                    percentage=amount
-                )
-            
-            messagebox.showinfo(t(TK.common_success if hasattr(TK, 'common_success') else TK.SUCCESS), f"{len(recipe)} {t(TK.MAT_TITLE)} {t(TK.MSG_SAVE_SUCCESS if hasattr(TK, 'MSG_SAVE_SUCCESS') else TK.SUCCESS)}")
-            
-        except AttributeError as e:
-            # Formülasyon editöründe gerekli metodlar yoksa
-            logger.warning(f"Formülasyon editörü uyumsuz: {e}")
-            messagebox.showwarning(t(TK.common_warning if hasattr(TK, 'common_warning') else TK.WARNING), t(TK.MSG_CHOOSE_FORMULATION))
+        # Formülasyon editörüne bileşenleri aktar (miktarlar % olarak ağırlık sütununa)
+        self.formulation_editor.load_formulation({
+            'formula_name': 'Optimizasyon önerisi',
+            'components': recipe
+        })
+        self.status_bar.set_status(f"Önerilen reçete editöre aktarıldı ({len(recipe)} bileşen)")

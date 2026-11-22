@@ -88,8 +88,8 @@ class VariationComparisonPanel(ttk.Frame, I18nMixin):
         for label, key in metrics:
             values = [label]
             row_vals = []
-            for t in trials:
-                val = t.get(key)
+            for trial in trials:
+                val = trial.get(key)
                 str_val = f"{val:.2f}" if isinstance(val, (int, float)) else str(val or "-")
                 row_vals.append(val or 0) # Store raw for comparison
                 values.append(str_val)
@@ -105,9 +105,9 @@ class VariationComparisonPanel(ttk.Frame, I18nMixin):
         all_ingredients = set()
         trial_components = {} # trial_id -> {comp_name: amount}
         
-        for t in trials:
-            comps = self.db_manager.get_formulation_materials(t['id']) # Fetch components using existing method (supports trial_id)
-            trial_components[t['id']] = {c['name']: c['amount'] for c in comps}
+        for trial in trials:
+            comps = self.db_manager.get_formulation_materials(trial['id']) # Fetch components using existing method (supports trial_id)
+            trial_components[trial['id']] = {c['name']: c['amount'] for c in comps}
             for c in comps:
                 all_ingredients.add(c['name'])
                 
@@ -116,8 +116,8 @@ class VariationComparisonPanel(ttk.Frame, I18nMixin):
         for ing in sorted_ing:
             values = [ing]
             row_vals = []
-            for t in trials:
-                amt = trial_components.get(t['id'], {}).get(ing, 0)
+            for trial in trials:
+                amt = trial_components.get(trial['id'], {}).get(ing, 0)
                 values.append(f"{amt:.2f}" if amt > 0 else "-")
                 row_vals.append(amt)
             

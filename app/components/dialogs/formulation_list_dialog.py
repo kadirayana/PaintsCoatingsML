@@ -6,6 +6,8 @@ Formülasyon listesi popup penceresi
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+from src.core.i18n import t
+from src.core.translation_keys import TK
 from typing import Callable, List, Dict, Optional
 
 

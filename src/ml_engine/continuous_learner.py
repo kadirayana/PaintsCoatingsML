@@ -65,6 +65,7 @@ class ContinuousLearner:
                 self.feature_names = data.get('feature_names', [])
                 self.target_names = data.get('target_names', [])
                 self.training_history = data.get('training_history', [])
+                self.training_sample_count = data.get('training_sample_count', 0)
                 
                 logger.info(f"Modeller yüklendi: {len(self.models)} hedef")
             except Exception as e:
@@ -82,6 +83,7 @@ class ContinuousLearner:
                 'feature_names': self.feature_names,
                 'target_names': self.target_names,
                 'training_history': self.training_history,
+                'training_sample_count': self.training_sample_count,
                 'last_training': datetime.now().isoformat()
             }
             

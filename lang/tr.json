@@ -49,7 +49,8 @@
         "materials": "📦 Hammaddeler",
         "test_results": "🧪 Test Sonuçları",
         "optimization": "⚖️ Karşılaştırma",
-        "ml_center": "🧠 ML Merkezi"
+        "ml_center": "🧠 ML Merkezi",
+        "recipe_optimizer": "🎯 Optimizasyon"
     },
     "dashboard": {
         "total_formulas": "Toplam Formül",

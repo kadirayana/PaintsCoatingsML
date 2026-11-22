@@ -45,6 +45,7 @@ class TK:
     NAV_TEST_RESULTS = "nav.test_results"
     NAV_OPTIMIZATION = "nav.optimization"
     NAV_ML_CENTER = "nav.ml_center"
+    NAV_RECIPE_OPTIMIZER = "nav.recipe_optimizer"
 
     # Dashboard
     DASHBOARD_TITLE = "nav.dashboard"

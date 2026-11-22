@@ -534,7 +534,7 @@ class IncrementalLearner:
             try:
                 num = int(v.version_id[1:])
                 max_num = max(max_num, num)
-            except:
+            except (ValueError, TypeError):
                 pass
         
         return f"v{max_num + 1:03d}"

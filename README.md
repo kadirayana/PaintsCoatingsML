@@ -41,7 +41,7 @@ Built with Python and Tkinter, this tool helps reduce development cycles by inte
 
 | **Dashboard** | **Material Management** |
 |:---:|:---:|
-| <img src="screenshot_dashboard.png" width="800"> | <img src="screenshot_raw materials.png" width="800"> |
+| <img src="screenshot_dashboard.png" width="800"> | <img src="screenshot_materials.png" width="800"> |
 
 | **Formulation Editor** | **Test Results & Training** |
 |:---:|:---:|
@@ -58,8 +58,8 @@ Built with Python and Tkinter, this tool helps reduce development cycles by inte
 1. **Prerequisites:** Python 3.10 or higher (Windows 10/11 recommended).
 2. **Clone the repository:**
    ```bash
-   git clone https://github.com/YOUR_USERNAME/paint-formulation-ai.git
-   cd paint-formulation-ai
+   git clone https://github.com/kadirayana/PaintsCoatingsML.git
+   cd PaintsCoatingsML
    ```
 3. **Setup Virtual Environment:**
    ```bash
@@ -101,7 +101,7 @@ Python ve Tkinter kullanılarak geliştirilen bu araç, fiziksel testlerden önc
 
 | **Kontrol Paneli (Dashboard)** | **Hammadde Yönetimi** |
 |:---:|:---:|
-| <img src="screenshot_dashboard.png" width="800"> | <img src="screenshot_raw materials.png" width="800"> |
+| <img src="screenshot_dashboard.png" width="800"> | <img src="screenshot_materials.png" width="800"> |
 
 | **Formülasyon Editörü** | **Test Sonuçları ve Eğitim** |
 |:---:|:---:|
@@ -118,8 +118,8 @@ Python ve Tkinter kullanılarak geliştirilen bu araç, fiziksel testlerden önc
 1. **Gereksinimler:** Python 3.10 veya üzeri (Windows 10/11 önerilir).
 2. **Projeyi Klonlayın:**
    ```bash
-   git clone https://github.com/YOUR_USERNAME/paint-formulation-ai.git
-   cd paint-formulation-ai
+   git clone https://github.com/kadirayana/PaintsCoatingsML.git
+   cd PaintsCoatingsML
    ```
 3. **Sanal Ortamı Kurun:**
    ```bash

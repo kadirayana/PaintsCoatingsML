@@ -49,7 +49,8 @@
         "materials": "📦 Raw Materials",
         "test_results": "🧪 Test Results",
         "optimization": "⚖️ Comparison",
-        "ml_center": "🧠 ML Center"
+        "ml_center": "🧠 ML Center",
+        "recipe_optimizer": "🎯 Optimization"
     },
     "dashboard": {
         "total_formulas": "Total Formulas",

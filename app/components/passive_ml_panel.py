@@ -14,8 +14,10 @@ from tkinter import ttk
 from typing import Dict, List, Optional, Callable
 import logging
 
-from src.core.i18n import t, I18nMixin
+from src.core.i18n import t, I18nMixin, get_i18n
 from src.core.translation_keys import TK
+
+logger = logging.getLogger(__name__)
 
 
 class PassiveMLPanel(ttk.Frame, I18nMixin):

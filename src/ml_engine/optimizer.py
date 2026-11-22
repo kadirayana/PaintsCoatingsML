@@ -11,7 +11,7 @@ Yöntem:
 
 import random
 import numpy as np
-from typing import List, Dict, Callable, Tuple
+from typing import List, Dict
 import logging
 from copy import deepcopy
 
@@ -42,25 +42,121 @@ class MLOptimizer:
         # Hedef boya tipi (PVC kontrolü için)
         self.target_type = None
         
-    def optimize(self, targets: Dict[str, float], project_id: int = None, constraints: Dict = None) -> List[Dict]:
+    def optimize(self, targets: Dict[str, float], project_id: int = None, constraints: Dict = None) -> Dict:
         """
         Hedeflere ulaşmak için reçete optimizasyonu yapar.
-        ...
+
+        Args:
+            targets: Hedef özellikler, örn. {'gloss': 85, 'total_cost': 50}
+            project_id: Aktif proje (bilgi amaçlı)
+            constraints: {'scope': 'project'|'global', 'max_cost': ..., 'prohibited_materials': [...]}
+
+        Returns:
+            {'success': True, 'suggestions': [{'score', 'recipe', 'prediction'}, ...]}
+            veya {'success': False, 'message': ...}
         """
-        # ... (Validation code same as before, truncated for brevity)
         self.scope = constraints.get('scope', 'global') if constraints else 'global'
         self.project_constraints = constraints if self.scope == 'project' else {}
-        # ...
 
-        # ... (Initialization code)
-        population = self._initialize_population(binders, pigments, solvents, additives)
+        if not targets:
+            return {'success': False, 'message': 'En az bir hedef seçmelisiniz.'}
+        if not self.learner.models:
+            return {'success': False, 'message': 'ML modeli henüz eğitilmedi.'}
+
+        # Model tarafından tahmin edilebilen (veya reçeteden hesaplanabilen) hedefler
+        supported = set(self.learner.models) | {'total_cost'}
+        if not supported & set(targets):
+            return {
+                'success': False,
+                'message': 'Seçilen hedeflerin hiçbiri için eğitilmiş model yok. '
+                           f'Kullanılabilir hedefler: {", ".join(sorted(supported))}'
+            }
+
+        materials = [m for m in (self.db_manager.get_all_materials() or []) if m.get('name')]
+        if len(materials) < 2:
+            return {'success': False, 'message': 'Optimizasyon için en az 2 hammadde tanımlı olmalı.'}
+
+        population = self._initialize_population(materials)
 
         for gen in range(self.generations):
-            scored_population = []
-            for recipe in population:
-                score = self._calculate_fitness(recipe, targets)
-                scored_population.append((score, recipe))
-            # ... (Rest of loop)
+            scored_population = sorted(
+                ((self._calculate_fitness(recipe, targets), recipe) for recipe in population),
+                key=lambda x: x[0]
+            )
+            # Elitizm: en iyiler doğrudan aktarılır
+            next_population = [deepcopy(r) for _, r in scored_population[:self.elite_size]]
+            while len(next_population) < self.population_size:
+                parent1 = self._tournament_selection(scored_population)
+                parent2 = self._tournament_selection(scored_population)
+                child = self._crossover(parent1, parent2)
+                self._mutate(child, materials)
+                child = self._merge_duplicates(child)
+                if len(child) >= 2:  # Tek bileşenli "reçete" anlamsız
+                    next_population.append(child)
+            population = next_population
+
+        final = sorted(
+            ((self._calculate_fitness(recipe, targets), recipe) for recipe in population),
+            key=lambda x: x[0]
+        )
+
+        suggestions = []
+        seen = set()
+        for score, recipe in final:
+            recipe = self.validator.normalize_recipe(recipe)
+            key = self._recipe_to_key(recipe)
+            if key in seen:
+                continue
+            seen.add(key)
+            suggestions.append({
+                'score': round(score, 4),
+                'recipe': recipe,
+                'prediction': self._predict_recipe(recipe)
+            })
+            if len(suggestions) >= 3:
+                break
+
+        logger.info(f"Optimizasyon tamamlandı: proje={project_id}, en iyi skor={suggestions[0]['score']}")
+        return {'success': True, 'suggestions': suggestions}
+
+    def _initialize_population(self, materials: List[Dict]) -> List[List[Dict]]:
+        """Rastgele hammadde seçimi ve oranlarıyla başlangıç popülasyonu oluştur"""
+        population = []
+        for _ in range(self.population_size):
+            k = min(len(materials), random.randint(3, 6))
+            chosen = random.sample(materials, k)
+            recipe = [self._create_component(m, random.uniform(1, 50)) for m in chosen]
+            population.append(self.validator.normalize_recipe(recipe))
+        return population
+
+    def _create_component(self, material: Dict, amount: float) -> Dict:
+        """Hammadde kaydından reçete bileşeni oluştur (fiziksel özellikler korunur)"""
+        comp = dict(material)
+        comp['material_id'] = material.get('id')
+        comp['code'] = material.get('code') or ''
+        comp['material_category'] = material.get('category')
+        comp['price'] = material.get('unit_price') or 0
+        comp['amount'] = amount
+        comp['percentage'] = amount
+        return comp
+
+    @staticmethod
+    def _merge_duplicates(recipe: List[Dict]) -> List[Dict]:
+        """Çaprazlama/mutasyonla aynı hammadde birden fazla kez gelirse miktarlarını birleştir"""
+        merged = {}
+        for comp in recipe:
+            key = comp.get('material_id') or comp.get('name')
+            if key in merged:
+                merged[key]['amount'] += comp.get('amount', 0)
+                merged[key]['percentage'] = merged[key]['amount']
+            else:
+                merged[key] = comp
+        return list(merged.values())
+
+    @staticmethod
+    def _recipe_cost(recipe: List[Dict]) -> float:
+        """Birim maliyet (TL/kg): miktarlar yüzde olarak kabul edilir"""
+        return sum((c.get('amount', 0) or 0) * (c.get('price', 0) or 0) for c in recipe) / 100
 
     def _calculate_fitness(self, recipe, targets):
         """Fitness fonksiyonu: Hedefe yakınlık (Loss) + Kimyasal Penalty + Proje Penalty"""
@@ -84,7 +180,7 @@ class MLOptimizer:
             # Cost Penalty
             max_cost = self.project_constraints.get('max_cost')
             if max_cost:
-                current_cost = sum(c.get('amount', 0) * c.get('price', 0) for c in recipe) / 100 # Approx unit cost
+                current_cost = self._recipe_cost(recipe)
                 if current_cost > max_cost:
                     # Exponential penalty for exceeding cost
                     project_penalty += (current_cost - max_cost) * 10 
@@ -92,7 +188,7 @@ class MLOptimizer:
             # Prohibited Material Penalty
             prohibited = self.project_constraints.get('prohibited_materials', [])
             for c in recipe:
-                if c.get('name', '').lower() in prohibited or c.get('code', '').lower() in prohibited:
+                if (c.get('name') or '').lower() in prohibited or (c.get('code') or '').lower() in prohibited:
                     project_penalty += 500 # Huge penalty
         
         return target_loss + chemical_penalty + project_penalty
@@ -107,7 +203,13 @@ class MLOptimizer:
         }
         
         result = self.learner.predict(params)
-        return result.get('predictions', {})
+        if not result.get('success'):
+            # Sessizce boş tahminle devam etmek optimizasyonu anlamsız kılar
+            raise RuntimeError(f"Model tahmini başarısız: {result.get('message')}")
+        prediction = dict(result.get('predictions', {}))
+        # Maliyet modelden değil, doğrudan reçeteden hesaplanabilir
+        prediction.setdefault('total_cost', round(self._recipe_cost(recipe), 2))
+        return prediction
 
     def _calculate_loss(self, prediction, targets):
         """Hedeflerden sapmayı hesapla"""
@@ -125,14 +227,7 @@ class MLOptimizer:
                 
                 loss += diff
                 weights += 1
-                
-        # Maliyet hedefi var mı?
-        if 'total_cost' in targets:
-             # Basit maliyet hesabı
-             cost = sum(c['amount'] * c.get('unit_price', 0) for c in prediction.get('components', [])) # Bu yanlış, predictionda components yok
-             # Maliyet ContinuousLearner tarafından tahmin ediliyor mu? Evet target olarak eklemiştik.
-             pass
-                
+
         return loss / weights if weights > 0 else 9999
 
     def _tournament_selection(self, scored_population, k=3):

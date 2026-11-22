@@ -363,19 +363,19 @@ class ModernFormulationEditor(ttk.LabelFrame, I18nMixin):
         """Update summary labels"""
         totals = self.grid.get_totals()
         
-        self.summary_labels['total_quantity'].config(
+        self.summary_labels['total_quantity'][1].config(
             text=f"{totals['total_quantity']:.2f} kg"
         )
-        self.summary_labels['total_solid'].config(
+        self.summary_labels['total_solid'][1].config(
             text=f"{totals['total_solid']:.2f} kg"
         )
-        self.summary_labels['solid_percent'].config(
+        self.summary_labels['solid_percent'][1].config(
             text=f"{totals['solid_percent']:.1f}%"
         )
-        self.summary_labels['total_cost'].config(
+        self.summary_labels['total_cost'][1].config(
             text=f"{totals['total_cost']:.2f} TL"
         )
-        self.summary_labels['row_count'].config(
+        self.summary_labels['row_count'][1].config(
             text=str(totals['row_count'])
         )
     
@@ -393,7 +393,7 @@ class ModernFormulationEditor(ttk.LabelFrame, I18nMixin):
     
     def _calculate(self):
         """Trigger calculation"""
-        self.grid._recalculate_all_percentages()
+        self.grid.recalculate_all()
         self._update_summary()
         
         if self.on_calculate:

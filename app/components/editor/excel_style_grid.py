@@ -517,6 +517,13 @@ class ExcelStyleGrid(ttk.Frame, I18nMixin):
         values[7] = f"{total_price:.2f}" if total_price > 0 else ""
         self.tree.item(item_id, values=values)
 
+    def recalculate_all(self):
+        """Tüm dolu satırların türetilmiş değerlerini (katı ağırlık, toplam fiyat) yeniden hesapla"""
+        for item_id in self.tree.get_children():
+            values = self.tree.item(item_id, 'values')
+            if values[1] or values[3]:
+                self._recalculate_row(item_id)
+
     def delete_row(self, item_id: str):
         self.tree.delete(item_id)
         self.row_data.pop(item_id, None)
@@ -590,6 +597,64 @@ class ExcelStyleGrid(ttk.Frame, I18nMixin):
             return None, errors
         return data, []
 
+    def load_data(self, data: List[Dict]):
+        """
+        Load data into the grid (8-column format).
+        
+        Supports source_type detection and auto-lookup.
+        """
+        self.clear_all()
+        
+        # Remove initial empty rows
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        self.row_count = 0
+        
+        for row in data:
+            self.row_count += 1
+            
+            # Support multiple input formats
+            material_code = row.get('material_code', row.get('code', ''))
+            material_name = row.get('material_name', row.get('material', row.get('name', '')))
+            weight = row.get('weight', row.get('quantity', row.get('amount', 0))) or 0
+            solid_pct = row.get('solid_pct', row.get('solid_content', 100)) or 100
+            unit_price = row.get('unit_price', 0) or 0
+            source_type = row.get('source_type', 'db')
+            
+            # Calculate derived values
+            solid_weight = weight * (solid_pct / 100)
+            total_price = weight * unit_price
+            
+            # Add manual marker if needed
+            display_name = material_name
+            if source_type == 'manual' and not display_name.startswith(self.MANUAL_MARKER):
+                display_name = f"{self.MANUAL_MARKER}{material_name}"
+            
+            values = (
+                str(self.row_count),
+                material_code,
+                display_name,
+                f"{weight:.2f}" if weight else "",
+                f"{solid_pct:.0f}" if solid_pct else "",
+                f"{solid_weight:.2f}" if solid_weight > 0 else "",
+                f"{unit_price:.2f}" if unit_price else "",
+                f"{total_price:.2f}" if total_price > 0 else "",
+            )
+            
+            tags = ('db_row',) if source_type == 'db' else ('manual_row',)
+            item_id = self.tree.insert('', 'end', values=values, tags=tags)
+            
+            # Store row data
+            self.row_data[item_id] = {
+                'source_type': source_type,
+                'solid_content': solid_pct,
+                'unit_price': unit_price,
+                'material_id': row.get('material_id'),
+            }
+        
+        # Add empty rows
+        self._ensure_empty_row()
+    
     def get_totals(self) -> Dict:
         total_weight = 0
         total_solid = 0

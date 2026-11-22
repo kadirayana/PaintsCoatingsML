@@ -131,7 +131,7 @@ class materialservice:
         if material and material.get('custom_properties'):
             try:
                 material['custom_properties'] = json.loads(material['custom_properties'])
-            except:
+            except (json.JSONDecodeError, TypeError):
                 pass
         return material
     

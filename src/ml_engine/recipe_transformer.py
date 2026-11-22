@@ -70,9 +70,9 @@ class RecipeTransformer:
             return [0.0] * self.feature_count
             
         # Toplam miktarı bul (normalize etmek için)
-        total_amount = sum(item.get('percentage', 0) for item in recipe)
+        total_amount = sum((item.get('percentage') or 0) for item in recipe)
         if total_amount == 0:
-            total_amount = sum(item.get('amount', 0) for item in recipe)
+            total_amount = sum((item.get('amount') or 0) for item in recipe)
         
         if total_amount == 0:
             return [0.0] * self.feature_count
@@ -103,39 +103,39 @@ class RecipeTransformer:
         
         for item in recipe:
             # Oran hesapla (0-1 arası)
-            amount = item.get('percentage', 0)
+            amount = (item.get('percentage') or 0)
             if amount == 0:
-                amount = item.get('amount', 0)
+                amount = (item.get('amount') or 0)
             
             ratio = amount / total_amount if total_amount > 0 else 0
             
             # Kategori
-            cat = item.get('material_category', 'other').lower()
+            cat = (item.get('material_category') or 'other').lower()
             if 'binder' in cat or 'resin' in cat:
                 cat_sums['binder'] += ratio
                 # Binder özellikleri
-                weighted_sums['oh_value'] += item.get('oh_value', 0) * ratio
-                weighted_sums['molecular_weight'] += item.get('molecular_weight', 0) * ratio
-                weighted_sums['glass_transition'] += item.get('glass_transition', 0) * ratio
+                weighted_sums['oh_value'] += (item.get('oh_value') or 0) * ratio
+                weighted_sums['molecular_weight'] += (item.get('molecular_weight') or 0) * ratio
+                weighted_sums['glass_transition'] += (item.get('glass_transition') or 0) * ratio
                 
             elif 'pigment' in cat or 'filler' in cat:
                 cat_sums['pigment'] += ratio
                 # Pigment özellikleri
-                weighted_sums['oil_absorption'] += item.get('oil_absorption', 0) * ratio
-                weighted_sums['particle_size'] += item.get('particle_size', 0) * ratio
+                weighted_sums['oil_absorption'] += (item.get('oil_absorption') or 0) * ratio
+                weighted_sums['particle_size'] += (item.get('particle_size') or 0) * ratio
                 
             elif 'solvent' in cat:
                 cat_sums['solvent'] += ratio
                 # Solvent özellikleri
-                weighted_sums['boiling_point'] += item.get('boiling_point', 0) * ratio
-                weighted_sums['evaporation_rate'] += item.get('evaporation_rate', 0) * ratio
+                weighted_sums['boiling_point'] += (item.get('boiling_point') or 0) * ratio
+                weighted_sums['evaporation_rate'] += (item.get('evaporation_rate') or 0) * ratio
                 
             elif 'additive' in cat:
                 cat_sums['additive'] += ratio
             
             # Katı madde (Varsayılan: Solvent %0, Diğerleri %100 katı gibi basit yaklaşım
             # veya veritabanından solid_content gelirse onu kullan)
-            item_solid = item.get('solid_content', 0)
+            item_solid = (item.get('solid_content') or 0)
             if item_solid is None or item_solid == 0:
                 # Tahmini
                 if 'solvent' in cat:
@@ -146,7 +146,7 @@ class RecipeTransformer:
             total_solid_weight += item_solid * ratio
             
             # Maliyet
-            features['theoretical_cost'] += item.get('unit_price', 0) * ratio
+            features['theoretical_cost'] += (item.get('unit_price') or 0) * ratio
             
         # Özelliklere ata
         features['total_binder_ratio'] = cat_sums['binder']

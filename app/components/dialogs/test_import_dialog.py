@@ -297,7 +297,7 @@ class TestResultsImportDialog(tk.Toplevel):
             self.after(0, self._show_validation_results)
             
         except Exception as e:
-            self.after(0, lambda: self._show_error(str(e)))
+            self.after(0, lambda err=str(e): self._show_error(err))
     
     def _show_validation_results(self):
         """Display validation results"""
@@ -428,7 +428,7 @@ class TestResultsImportDialog(tk.Toplevel):
             self.after(0, lambda: self._on_import_complete(result))
             
         except Exception as e:
-            self.after(0, lambda: self._show_error(str(e)))
+            self.after(0, lambda err=str(e): self._show_error(err))
     
     def _on_import_complete(self, result):
         """Handle import completion"""

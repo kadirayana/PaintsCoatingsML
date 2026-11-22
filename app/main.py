@@ -22,6 +22,8 @@ else:
 
 # Modül yollarını ekle
 sys.path.insert(0, APP_DIR)
+# Göreli yollar (ör. 'assets/models') her zaman uygulama dizinine göre çözülsün
+os.chdir(APP_DIR)
 
 # Yerel modülleri import et
 from app.ui_components import PaintFormulationApp

@@ -137,7 +137,7 @@ class FormulationService:
                 formulation['calculated_properties'] = json.loads(
                     formulation['calculated_properties']
                 )
-            except:
+            except (json.JSONDecodeError, TypeError):
                 pass
         
         return formulation
@@ -378,7 +378,7 @@ class FormulationService:
                             'code': f.get('formula_code'),
                             'similarity': similarity
                         })
-                except:
+                except Exception:
                     pass
         
         # Sort by similarity

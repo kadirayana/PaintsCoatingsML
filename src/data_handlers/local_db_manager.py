@@ -136,6 +136,8 @@ class LocalDBManager:
             
             # Add linkage column if missing - with proper error handling
             migration_columns = [
+                # Legacy V1 bağlantısı: eski sorgular ve test içe aktarımı hâlâ kullanıyor
+                ('trials', 'formulation_id', 'INTEGER'),
                 ('trials', 'parent_formulation_id', 'INTEGER REFERENCES parent_formulations(id)'),
                 ('trials', 'trial_code', 'TEXT'),
                 ('trials', 'is_deleted', 'INTEGER DEFAULT 0'),
@@ -340,6 +342,12 @@ class LocalDBManager:
                 # Don't crash on migration - log and continue
                 logger.warning(f"created_at migration warning: {e}")
         
+        # components: legacy V1 bağlantısı (get_formulation_materials hâlâ sorguluyor)
+        cursor.execute("PRAGMA table_info(components)")
+        comp_cols = [col[1] for col in cursor.fetchall()]
+        if 'formulation_id' not in comp_cols:
+            cursor.execute("ALTER TABLE components ADD COLUMN formulation_id INTEGER")
+
         # materials table migrations - INTEGER DEFAULT 0 is constant, so this is safe
         cursor.execute("PRAGMA table_info(materials)")
         mat_cols = [col[1] for col in cursor.fetchall()]

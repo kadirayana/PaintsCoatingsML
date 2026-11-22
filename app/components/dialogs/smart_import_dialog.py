@@ -289,7 +289,7 @@ class SmartImportDialog(tk.Toplevel):
             self.after(0, self._on_import_complete)
             
         except Exception as e:
-            self.after(0, lambda: self._on_import_error(str(e)))
+            self.after(0, lambda err=str(e): self._on_import_error(err))
     
     def _on_import_complete(self):
         """Handle import completion"""

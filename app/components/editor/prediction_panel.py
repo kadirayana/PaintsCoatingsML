@@ -112,7 +112,7 @@ class PredictionPanel(ttk.LabelFrame):
             self.after(0, lambda: self._on_prediction_error("Geçersiz kalınlık değeri"))
         except Exception as e:
             logger.error(f"Tahmin hatası: {e}")
-            self.after(0, lambda: self._on_prediction_error(str(e)))
+            self.after(0, lambda err=str(e): self._on_prediction_error(err))
     
     def _on_prediction_complete(self, result: Dict, thickness: float):
         """Tahmin tamamlandığında"""
