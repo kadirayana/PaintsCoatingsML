@@ -276,11 +276,11 @@ class ExcelStyleGrid(ttk.Frame, I18nMixin):
         self.tree.bind('<Delete>', self._on_delete_key)
         
         self.tree.tag_configure('empty', foreground='gray')
-        self.tree.tag_configure('edited', foreground='#1565C0')
+        self.tree.tag_configure('edited', foreground='#64B5F6')
         self.tree.tag_configure('warning', foreground='#FF5722')
         self.tree.tag_configure('error_row', background='#FFEBEE', foreground='#C62828')
-        self.tree.tag_configure('db_row', foreground='#1B5E20')
-        self.tree.tag_configure('manual_row', foreground='#E65100')
+        self.tree.tag_configure('db_row', foreground='#A5D6A7')
+        self.tree.tag_configure('manual_row', foreground='#FFB74D')
         
         self._update_texts()
 

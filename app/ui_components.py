@@ -199,18 +199,18 @@ class PaintFormulationApp(I18nMixin):
         self.file_menu.entryconfig(0, label=t(TK.MENU_EXIT))
         self.settings_menu.entryconfig(0, label=t(TK.SETTINGS_LANGUAGE))
         
-        # Notebook sekmelerini güncelle
-        all_tabs = self.notebook.tabs()
-        nav_keys = [TK.NAV_DASHBOARD, TK.NAV_MATERIALS, TK.NAV_FORMULATIONS, 
-                    TK.NAV_TEST_RESULTS, TK.NAV_ML_CENTER, TK.NAV_OPTIMIZATION,
-                    TK.NAV_RECIPE_OPTIMIZER]
-        
-        for i, key in enumerate(nav_keys):
-            if i < len(all_tabs):
-                tab_id = all_tabs[i]
-                new_text = t(key)
-                logger.info(f"MainApp: Updating notebook tab {i} (widget: {tab_id}) to '{new_text}' (key: {key})")
-                self.notebook.tab(tab_id, text=new_text)
+        # Notebook sekmelerini güncelle (sıra numarasıyla değil, sekme widget'ıyla)
+        tab_keys = [('notebook', 'main_tab', TK.NAV_DASHBOARD), ('notebook', 'material_tab', TK.NAV_MATERIALS),
+                    ('notebook', 'formulation_tab', TK.NAV_FORMULATIONS),
+                    ('notebook', 'test_tab', TK.NAV_TEST_RESULTS), ('notebook', 'comp_tab', TK.NAV_OPTIMIZATION),
+                    ('adv_notebook', 'ml_tab', TK.NAV_ML_CENTER),
+                    ('adv_notebook', 'opt_tab', TK.NAV_RECIPE_OPTIMIZER)]
+        for book, attr, key in tab_keys:
+            if hasattr(self, book) and hasattr(self, attr):
+                getattr(self, book).tab(getattr(self, attr), text=t(key))
+        if hasattr(self, 'adv_tab'):
+            lang = self.config.get('Application', 'language', fallback='tr')
+            self.notebook.tab(self.adv_tab, text="🧪 Gelişmiş (ML)" if lang == 'tr' else "🧪 Advanced (ML)")
         
         # Explicitly refresh sub-panels just in case
         for attr in ['dashboard', 'material_panel', 'formulation_editor', 
@@ -281,7 +281,7 @@ class PaintFormulationApp(I18nMixin):
         self.main_paned.pack(fill=tk.BOTH, expand=True)
         
         # === LEFT SIDEBAR ===
-        self.sidebar_frame = ttk.Frame(self.main_paned, width=250)
+        self.sidebar_frame = ttk.Frame(self.main_paned)
         self.sidebar = SidebarNavigator(
             self.sidebar_frame, 
             self.db_manager, 
@@ -290,7 +290,9 @@ class PaintFormulationApp(I18nMixin):
             context=self.context  # Pass ProjectContext for unified state
         )
         self.sidebar.pack(fill=tk.BOTH, expand=True)
-        self.main_paned.add(self.sidebar_frame, minsize=200)
+        # Genişlik ekran ölçeğine göre (DPI-aware süreçte piksel = fiziksel piksel; %150 ekranda yazılar büyür)
+        dpi_scale = max(1.0, self.root.winfo_fpixels('1i') / 96.0)
+        self.main_paned.add(self.sidebar_frame, minsize=int(260 * dpi_scale), width=int(330 * dpi_scale))
         
         # Compatibility Alias
         self.project_panel = self.sidebar
@@ -304,7 +306,7 @@ class PaintFormulationApp(I18nMixin):
         self.notebook.pack(fill=tk.BOTH, expand=True)
         
         # === SEKME 1: Ana Sayfa (Dashboard) ===
-        main_tab = ttk.Frame(self.notebook, padding=10)
+        main_tab = self.main_tab = ttk.Frame(self.notebook, padding=10)
         self.notebook.add(main_tab, text=t(TK.NAV_DASHBOARD))
         
         # Dashboard Content
@@ -312,7 +314,7 @@ class PaintFormulationApp(I18nMixin):
         self.dashboard.pack(fill=tk.BOTH, expand=True)
 
         # === SEKME 2: Hammaddeler / Raw materials ===
-        material_tab = ttk.Frame(self.notebook, padding=10)
+        material_tab = self.material_tab = ttk.Frame(self.notebook, padding=10)
         self.notebook.add(material_tab, text=t(TK.NAV_MATERIALS))
         
         self.material_panel = MaterialManagementPanel(
@@ -324,7 +326,7 @@ class PaintFormulationApp(I18nMixin):
         
         # === SEKME 3: Formülasyon Editörü ===
         from app.components.editor.modern_formulation_editor import ModernFormulationEditor
-        formulation_tab = ttk.Frame(self.notebook, padding=10)
+        formulation_tab = self.formulation_tab = ttk.Frame(self.notebook, padding=10)
         self.notebook.add(formulation_tab, text=t(TK.NAV_FORMULATIONS))
         
         self.formulation_editor = ModernFormulationEditor(
@@ -345,7 +347,7 @@ class PaintFormulationApp(I18nMixin):
         
         # === SEKME 4: Test Sonuçları (V2 - Decision Support) ===
         from app.test_results_panel_v2 import TestResultsPanelV2
-        test_tab = ttk.Frame(self.notebook, padding=10)
+        test_tab = self.test_tab = ttk.Frame(self.notebook, padding=10)
         self.notebook.add(test_tab, text=t(TK.NAV_TEST_RESULTS))
         
         self.test_results_panel = TestResultsPanelV2(
@@ -357,11 +359,24 @@ class PaintFormulationApp(I18nMixin):
         )
         self.test_results_panel.pack(fill=tk.BOTH, expand=True)
         
-        # === SEKME 5: ML Merkezi (Passive Assistant) ===
+        # === SEKME 5: Karşılaştırma (ağaçtan seçilen varyasyonun konsepti) ===
+        from app.components.comparison_panel import VariationComparisonPanel
+        comp_tab = self.comp_tab = ttk.Frame(self.notebook)
+        self.notebook.add(comp_tab, text=t(TK.NAV_OPTIMIZATION))
+        self.comparison_panel = VariationComparisonPanel(comp_tab, self.db_manager)
+        self.comparison_panel.pack(fill=tk.BOTH, expand=True)
+
+        # === SEKME 6: Gelişmiş (ML) — yeterli test verisi olana kadar boş kalan ML ekranları ===
+        adv_tab = self.adv_tab = ttk.Frame(self.notebook)
+        self.notebook.add(adv_tab, text="🧪 Gelişmiş (ML)")
+        self.adv_notebook = ttk.Notebook(adv_tab)
+        self.adv_notebook.pack(fill=tk.BOTH, expand=True)
+
+        # Gelişmiş › ML Merkezi (Passive Assistant)
         from app.components.passive_ml_panel import PassiveMLPanel
-        ml_tab = ttk.Frame(self.notebook)
-        self.notebook.add(ml_tab, text=t(TK.NAV_ML_CENTER))
-        
+        ml_tab = self.ml_tab = ttk.Frame(self.adv_notebook)
+        self.adv_notebook.add(ml_tab, text=t(TK.NAV_ML_CENTER))
+
         self.ml_panel = PassiveMLPanel(
             ml_tab,
             db_manager=self.db_manager,
@@ -370,17 +385,10 @@ class PaintFormulationApp(I18nMixin):
         )
         self.ml_panel.pack(fill=tk.BOTH, expand=True)
 
-        # === SEKME 6: Karşılaştırma ===
-        from app.components.comparison_panel import VariationComparisonPanel
-        comp_tab = ttk.Frame(self.notebook)
-        self.notebook.add(comp_tab, text=t(TK.NAV_OPTIMIZATION)) 
-        self.comparison_panel = VariationComparisonPanel(comp_tab, self.db_manager)
-        self.comparison_panel.pack(fill=tk.BOTH, expand=True)
-
-        # === SEKME 7: Reçete Optimizasyonu (Genetik Algoritma) ===
+        # Gelişmiş › Reçete Optimizasyonu (Genetik Algoritma)
         from app.components.optimization_panel import RecipeOptimizationPanel
-        opt_tab = ttk.Frame(self.notebook, padding=10)
-        self.notebook.add(opt_tab, text=t(TK.NAV_RECIPE_OPTIMIZER))
+        opt_tab = self.opt_tab = ttk.Frame(self.adv_notebook, padding=10)
+        self.adv_notebook.add(opt_tab, text=t(TK.NAV_RECIPE_OPTIMIZER))
         self.optimization_panel = RecipeOptimizationPanel(
             opt_tab,
             on_generate_recipe=self._on_generate_recipe,
@@ -398,29 +406,25 @@ class PaintFormulationApp(I18nMixin):
         from app.components.sidebar_navigator import TYPE_PROJECT, TYPE_CONCEPT, TYPE_TRIAL
         
         if item_type == TYPE_PROJECT:
-            # Show Dashboard
+            # Aktif projeyi değiştir; kullanıcıyı başka sekmeye atma
             self.active_project_id = item_id
-            self.notebook.select(0) # Main Tab
-            self.status_bar.update_status(f"{t(TK.FORM_PROJECT)} {t(TK.common_success if hasattr(TK, 'common_success') else TK.SUCCESS)}: ID {item_id}")
-            
+            project = self.db_manager.get_project(item_id)
+            self.status_bar.set_status(f"{t(TK.FORM_PROJECT)}: {project['name'] if project else item_id}")
+
         elif item_type == TYPE_CONCEPT:
             # Show Concept Comparison
-            self.notebook.select(5) # Comparison Tab (Index 5)
+            self.notebook.select(self.comp_tab)
             self.comparison_panel.load_concept(item_id)
             self.status_bar.update_status(f"{t(TK.NAV_OPTIMIZATION)}: ID {item_id}")
-            
+
         elif item_type == TYPE_TRIAL:
-            # Load Trial into Editor
-            self.notebook.select(2)  # Formülasyon Tab (Index 2)
-            self.active_formulation_id = item_id # Maps to trial_id in V2
-            self._on_load_detailed_formulation(item_id)
-            self.status_bar.set_status(f"{t(TK.FORM_SAVED_FORMULAS)} {t(TK.common_loading if hasattr(TK, 'common_loading') else TK.LOADING)}: ID {item_id}")
+            self._show_trial_everywhere(item_id)
             
         elif item_type == "new_trial_request":
             # Konsept altında yeni varyasyon: proje + konsept adı (formül adı) hazır gelir,
             # kayıtta aynı konsepte bağlanır. Kullanıcı yalnızca yeni kodu ve reçeteyi girer.
             concept = self.db_manager.get_parent_formulation(item_id)
-            self.notebook.select(2)  # Formülasyon Tab (Index 2)
+            self.notebook.select(self.formulation_tab)  # Formülasyon Tab (Index 2)
             self.formulation_editor._clear_form()
             if concept:
                 self.context.project_id = concept['project_id']
@@ -737,9 +741,8 @@ class PaintFormulationApp(I18nMixin):
         elif event == ContextEvent.FORMULATION_CHANGED:
             # Formülasyon değişti - detay panellerini güncelle
             if ctx.formulation_id:
-                self.status_bar.set_status(f"Formülasyon: {ctx.formulation_code}")
-                
-                # Aktif sekmeye göre yükle
+                # Seçilen varyasyonu tüm detay sekmelerine yükle
+                self.active_formulation_id = ctx.formulation_id
                 self._load_formulation_to_current_tab()
             
         elif event == ContextEvent.DATA_SAVED:
@@ -833,25 +836,51 @@ class PaintFormulationApp(I18nMixin):
         self._load_formulation_to_current_tab()
     
     def _load_formulation_to_current_tab(self):
-        """Seçili formülasyonu aktif sekmeye yükle"""
-        if not self.active_formulation_id:
-            return
-        
-        current_tab = self.notebook.index(self.notebook.select())
-        
-        # Sekme 3: Formülasyon (index 2)
-        if current_tab == 2 and hasattr(self, 'formulation_editor'):
-            # Formülasyon editörüne yükle
-            self._on_load_detailed_formulation(self.active_formulation_id)
-        
-        # Sekme 4: Test Sonuçları (index 3)
-        elif current_tab == 3 and hasattr(self, 'test_results_panel'):
-            # Test sonuçlarını yükle
-            trial_data = self.db_manager.get_latest_trial_by_formula_code(self.active_formulation_code)
-            if trial_data:
-                self.test_results_panel._fill_form_with_trial(trial_data)
-            # Formül combobox'ını da güncelle
-            self.test_results_panel.formulation_combo.set(self.active_formulation_code)
+        """Seçili formülasyonu tüm detay sekmelerine yükle"""
+        if self.active_formulation_id:
+            self._show_trial_everywhere(self.active_formulation_id)
+
+    def _show_trial_everywhere(self, trial_id: int):
+        """
+        Bir varyasyonu Formülasyon, Test Sonuçları ve Karşılaştırma sekmelerine birlikte yükle.
+        Kullanıcı bu sekmelerden birindeyse orada kalır; değilse Formülasyon sekmesi açılır.
+        """
+        import time
+        now = time.monotonic()
+        if getattr(self, '_shown_trial', (None, 0))[0] == trial_id and now - self._shown_trial[1] < 0.5:
+            return  # aynı seçim hem sidebar hem context olayından geldi
+        self._shown_trial = (trial_id, now)
+        try:
+            trial = self.db_manager.get_trial_full(trial_id)
+            if not trial:
+                self.status_bar.set_status(f"Varyasyon bulunamadı: ID {trial_id}")
+                return
+            self.active_formulation_id = trial_id
+            self.active_formulation_code = trial.get('trial_code')
+            self.active_project_id = trial.get('project_id')
+
+            # Formülasyon editörü (reçete) + projesi
+            self._on_load_detailed_formulation(trial_id)
+            self.formulation_editor.set_project(trial.get('project_id'), trial.get('project_name'))
+            # Test sonuçları (aynı kayıt, kodla değil ID ile)
+            for raw_key, column in self.TEST_KEY_ALIASES.items():
+                if trial.get(raw_key) is None and trial.get(column) is not None:
+                    trial[raw_key] = trial[column]
+            self.test_results_panel.show_trial(trial)
+            # Karşılaştırma: aynı konseptin diğer varyasyonları
+            if trial.get('concept_id'):
+                self.comparison_panel.load_concept(trial['concept_id'])
+
+            if self.notebook.select() not in (str(self.formulation_tab), str(self.test_tab), str(self.comp_tab)):
+                self.notebook.select(self.formulation_tab)
+            date = (trial.get('trial_date') or '')[:10]
+            self.status_bar.set_status(
+                f"{trial.get('project_name', '')} / {trial.get('trial_code', '')}"
+                + (f" · {trial.get('concept_name')}" if trial.get('concept_name') else '')
+                + (f" · {date}" if date else ''))
+        except Exception as e:
+            logger.error(f"Varyasyon yükleme hatası: {e}", exc_info=True)
+            self.status_bar.set_status(f"Varyasyon yükleme hatası: {e}")
     
     def _on_dashboard_navigate(self, card_label: str):
         """Dashboard kartına tıklandığında filtrelenmiş popup göster"""
@@ -874,7 +903,7 @@ class PaintFormulationApp(I18nMixin):
                 title = f"⏳ {t(TK.DASHBOARD_WAITING_TEST)}"
             elif card_label in success_keys:
                 # Başarılı için test sonuçlarını göster
-                trials = self.db_manager.get_recent_trials(100)
+                trials = self.db_manager.get_successful_trials()
                 title = f"✅ {t(TK.DASHBOARD_SUCCESSFUL)}"
                 if trials:
                     TrialListDialog(self.root, title, trials)
@@ -906,13 +935,14 @@ class PaintFormulationApp(I18nMixin):
     def _on_quick_action(self, action: str, tab_index: int = None):
         """Hızlı işlem butonlarına tıklandığında"""
         if action == "new_formulation":
-            self.notebook.select(2)  # Formülasyon sekmesi
+            self.notebook.select(self.formulation_tab)  # Formülasyon sekmesi
             self.status_bar.set_status(t(TK.MSG_READY))
         elif action == "new_test":
-            self.notebook.select(3)  # Test sonuçları sekmesi
+            self.notebook.select(self.test_tab)  # Test sonuçları sekmesi
             self.status_bar.set_status(t(TK.MSG_READY))
         elif action == "ml_predict":
-            self.notebook.select(4)  # Optimizasyon sekmesi
+            self.notebook.select(self.adv_tab)  # Gelişmiş › Optimizasyon
+            self.adv_notebook.select(self.opt_tab)
             self.status_bar.set_status(t(TK.ML_AI_ENGINE))
         elif action == "report":
             self._generate_report()
@@ -952,7 +982,7 @@ class PaintFormulationApp(I18nMixin):
     
     def _on_edit_formulation(self, formulation_id: int):
         """Formülasyonu düzenle - Formülasyon sekmesine yönlendir"""
-        self.notebook.select(2)
+        self.notebook.select(self.formulation_tab)
         self.active_formulation_id = formulation_id
         self._on_load_detailed_formulation(formulation_id)
     
@@ -1501,7 +1531,9 @@ class PaintFormulationApp(I18nMixin):
         """Test sonuçlarını seçili varyasyonun (trial) kaydına yaz"""
         try:
             code = (data.get('formulation') or '').strip()
-            trial = self.db_manager.get_trial_by_code(code, self.context.project_id) \
+            # Ağaçtan açılan kayıt: ID ile (aynı kod başka projede de olabilir)
+            trial = self.db_manager.get_trial_full(data['trial_id']) if data.get('trial_id') else None
+            trial = trial or self.db_manager.get_trial_by_code(code, self.context.project_id) \
                 or self.db_manager.get_trial_by_code(code)
             if not trial:
                 messagebox.showwarning(t(TK.WARNING), f"'{code}' kodlu formülasyon bulunamadı.")
@@ -1579,7 +1611,7 @@ class PaintFormulationApp(I18nMixin):
         }
         
         # Sekmeyi değiştir (Index 2: Formülasyon)
-        self.notebook.select(2) 
+        self.notebook.select(self.formulation_tab) 
         
         # Editöre yükle
         if hasattr(self, 'formulation_editor'):
@@ -1700,7 +1732,7 @@ class PaintFormulationApp(I18nMixin):
             return
             
         # Formülasyon sekmesine geç
-        self.notebook.select(2)  # "Formülasyon" sekmesi (index 2)
+        self.notebook.select(self.formulation_tab)  # "Formülasyon" sekmesi (index 2)
         
         # Formülasyon editörüne bileşenleri aktar (miktarlar % olarak ağırlık sütununa)
         self.formulation_editor.load_formulation({

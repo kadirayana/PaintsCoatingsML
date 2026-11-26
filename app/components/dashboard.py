@@ -359,16 +359,19 @@ class DashboardPanel(ttk.LabelFrame, I18nMixin):
                 months = []
                 values = []
                 for item in monthly_data:
-                    month_num = item['month'].split('-')[1]
-                    months.append(t(f"common.month_{month_num}"))
+                    year, month_num = item['month'].split('-')[:2]
+                    months.append(f"{t(f'common.month_{month_num}')[:3]}\n{year[2:]}")
                     values.append(item['count'])
             else:
-                # Localized default months
-                months = [t(f"common.month_0{i}") for i in range(1, 7)]
-                total = int(stats.get('Toplam Formül', stats.get('total_formulas', 0)))
-                values = [0] * 5 + [total]
-            
-            self.ax1.bar(months, values, color='#4CAF50', alpha=0.8)
+                months, values = [], []
+
+            if months:
+                self.ax1.bar(months, values, color='#4CAF50', alpha=0.8)
+                self.ax1.tick_params(axis='x', labelsize=7)
+            else:
+                # Tarihli çalışma yoksa sahte çubuk çizme
+                self.ax1.text(0.5, 0.5, '—', ha='center', va='center', color='white', fontsize=14,
+                              transform=self.ax1.transAxes)
             self.ax1.set_title(t(TK.DASHBOARD_CHART_MONTHLY), fontsize=10, color='white')
             self.ax1.set_ylabel(t(TK.DASHBOARD_CHART_Y_AXIS), fontsize=9, color='white')
             self.ax1.set_facecolor('#3c3c3c')
@@ -378,11 +381,13 @@ class DashboardPanel(ttk.LabelFrame, I18nMixin):
             self.ax2.clear()
             # get_dashboard_stats anahtarları: successful_tests / pending_tests
             success = int(stats.get('successful_tests', 0) or 0)
-            other = int(stats.get('tested', success) or 0) - success  # test edildi, skor < 70
+            failed = int(stats.get('failed_tests', 0) or 0)
+            other = max(0, int(stats.get('tested', success) or 0) - success - failed)  # ölçüm var, sonuç belirsiz
             waiting = int(stats.get('pending_tests', 0) or 0)
             parts = [(success, t(TK.DASHBOARD_STATS_SUCCESS), '#4CAF50'),
-                     (other, t(TK.DASHBOARD_TESTED), '#2196F3'),
-                     (waiting, t(TK.DASHBOARD_STATS_WAITING), '#FFC107')]
+                     (failed, 'Olumsuz' if t(TK.DASHBOARD_STATS_SUCCESS) == 'Olumlu' else 'Negative', '#F44336'),
+                     (other, t(TK.DASHBOARD_TESTED), '#FFC107'),
+                     (waiting, t(TK.DASHBOARD_STATS_WAITING), '#757575')]
             parts = [p for p in parts if p[0] > 0]
             if parts:
                 self.ax2.pie(

@@ -84,7 +84,7 @@ class VariationComparisonPanel(ttk.Frame, I18nMixin):
             (t(TK.TEST_OPACITY), 'opacity'),
             (t(TK.TEST_GLOSS60), 'gloss'),
             (t(TK.FORM_TOTAL_COST), 'total_cost'),
-            (t(TK.DASHBOARD_STATS_SUCCESS), 'quality_score')
+            (t(TK.PARAMS_QUALITY_SCORE), 'quality_score')
         ]
         
         props_header = t(TK.TEST_PHYSICAL_PROPS)

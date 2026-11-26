@@ -864,6 +864,14 @@ class LocalDBManager:
             row = conn.execute(sql, args).fetchone()
             return dict(row) if row else None
 
+    def get_trial_full(self, trial_id: int) -> Optional[Dict]:
+        """Varyasyonun tüm sütunları + proje/konsept bilgisi (ağaçtan seçim için)"""
+        sql = ("SELECT t.*, pf.project_id, pf.id AS concept_id, pf.concept_name, p.name AS project_name "
+               + self._ACTIVE_TRIAL_JOIN + " WHERE t.id = ?")
+        with self.get_connection() as conn:
+            row = conn.execute(sql, (trial_id,)).fetchone()
+            return dict(row) if row else None
+
     def replace_trial_components(self, trial_id: int, components: List[Dict]):
         """Varyasyonun reçetesini (bileşenlerini) tamamen değiştir"""
         with self.get_connection() as conn:
@@ -1389,38 +1397,59 @@ class LocalDBManager:
 
     # === DASHBOARD ===
     
+    # Sonuç durumu (ağaçtaki simgelerle aynı kural):
+    #   olumlu  = result 'success' ya da kalite skoru >= 70
+    #   olumsuz = result 'fail' ya da kalite skoru < 50
+    #   ölçüm/test kaydı var = result tested/success/fail ya da kalite skoru var
+    _SUCCESS_SQL = " AND (t.result = 'success' OR t.quality_score >= 70)"
+    _FAIL_SQL = " AND (t.result = 'fail' OR (t.quality_score < 50 AND COALESCE(t.result, '') <> 'success'))"
+    _MEASURED_SQL = " AND (t.result IN ('tested', 'success', 'fail') OR t.quality_score IS NOT NULL)"
+
     def get_dashboard_stats(self) -> Dict:
         """Dashboard için istatistikleri getir (nötr anahtarlarla)"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            # Formül = aktif varyasyon (V2 şeması); test edilmiş = kalite skoru olan
             base = 'SELECT COUNT(*) as c ' + self._ACTIVE_TRIAL_JOIN + ' WHERE ' + self._ACTIVE_TRIAL_SQL
             total = cursor.execute(base).fetchone()['c']
-            tested = cursor.execute(base + ' AND t.quality_score IS NOT NULL').fetchone()['c']
-            # Başarılı = kalite skoru >= 70 (ağaçtaki ✅ ile aynı kural)
-            successful = cursor.execute(base + ' AND t.quality_score >= 70').fetchone()['c']
+            tested = cursor.execute(base + self._MEASURED_SQL).fetchone()['c']
+            successful = cursor.execute(base + self._SUCCESS_SQL).fetchone()['c']
+            failed = cursor.execute(base + self._FAIL_SQL).fetchone()['c']
+            # "Bu ay" = çalışma tarihi (trial_date) bu ay olanlar; içe aktarılan tarihsiz kartlar sayılmaz
             this_month = cursor.execute(
-                base + " AND strftime('%Y-%m', COALESCE(t.created_at, t.trial_date))"
-                       " = strftime('%Y-%m', 'now')").fetchone()['c']
+                base + " AND strftime('%Y-%m', t.trial_date) = strftime('%Y-%m', 'now')").fetchone()['c']
             return {
                 'total_formulas': total,
                 'added_this_month': this_month,
                 'pending_tests': max(0, total - tested),
                 'successful_tests': successful,
+                'failed_tests': failed,
                 'tested': tested
             }
 
     def get_monthly_formulation_counts(self) -> List[Dict]:
-        """Returns monthly formulation counts for the last 6 months"""
+        """Son 12 ayın çalışma sayıları; ay penceresi en son çalışma tarihine göre kurulur
+        (eski veriler içe aktarıldığında grafik boş kalmasın)"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            latest = cursor.execute(
+                "SELECT MAX(t.trial_date) " + self._ACTIVE_TRIAL_JOIN + " WHERE " + self._ACTIVE_TRIAL_SQL
+            ).fetchone()[0]
+            if not latest:
+                return []
             cursor.execute(
-                "SELECT strftime('%Y-%m', COALESCE(t.created_at, t.trial_date)) as month, COUNT(*) as count "
+                "SELECT strftime('%Y-%m', t.trial_date) as month, COUNT(*) as count "
                 + self._ACTIVE_TRIAL_JOIN +
-                " WHERE COALESCE(t.created_at, t.trial_date) >= date('now', '-6 months') AND "
+                " WHERE t.trial_date > date(?, 'start of month', '-11 months', '-1 day') AND "
                 + self._ACTIVE_TRIAL_SQL +
-                " GROUP BY month ORDER BY month ASC")
-            return [{'month': row['month'], 'count': row['count']} for row in cursor.fetchall()]
+                " GROUP BY month ORDER BY month ASC", (latest,))
+            counts = {row['month']: row['count'] for row in cursor.fetchall()}
+            # boş ayları da göster
+            y, m = int(latest[:4]), int(latest[5:7])
+            months = []
+            for _ in range(12):
+                months.append(f"{y:04d}-{m:02d}")
+                y, m = (y, m - 1) if m > 1 else (y - 1, 12)
+            return [{'month': mo, 'count': counts.get(mo, 0)} for mo in reversed(months)]
 
     def get_dashboard_insights(self) -> Dict:
         """Dashboard içgörüleri için ham veriler (metinleştirme arayüzde, dile göre yapılır)"""
@@ -1446,7 +1475,7 @@ class LocalDBManager:
         sql = ("SELECT t.*, t.trial_code AS formula_code, pf.concept_name AS formula_name, "
                "pf.concept_name, pf.project_id, p.name AS project_name "
                + self._ACTIVE_TRIAL_JOIN + " WHERE " + self._ACTIVE_TRIAL_SQL + extra_where +
-               " ORDER BY COALESCE(t.created_at, t.trial_date) DESC")
+               " ORDER BY COALESCE(t.trial_date, t.created_at) DESC")
         with self.get_connection() as conn:
             return [dict(row) for row in conn.execute(sql).fetchall()]
 
@@ -1457,11 +1486,16 @@ class LocalDBManager:
     def get_formulations_this_month(self) -> List[Dict]:
         """'Bu Ay Eklenen' kartı"""
         return self._list_active_trials(
-            " AND strftime('%Y-%m', COALESCE(t.created_at, t.trial_date)) = strftime('%Y-%m', 'now')")
+            " AND strftime('%Y-%m', t.trial_date) = strftime('%Y-%m', 'now')")
 
     def get_formulations_without_trials(self) -> List[Dict]:
-        """'Test Bekleyen' kartı: henüz test sonucu (kalite skoru) girilmemiş varyasyonlar"""
-        return self._list_active_trials(" AND t.quality_score IS NULL")
+        """'Ölçümü olmayan' kartı: test/ölçüm kaydı olmayan (yalnızca reçete) varyasyonlar"""
+        return self._list_active_trials(" AND NOT (COALESCE(t.result, '') IN ('tested', 'success', 'fail')"
+                                        " OR t.quality_score IS NOT NULL)")
+
+    def get_successful_trials(self) -> List[Dict]:
+        """'Olumlu' kartı: kartla aynı kural (result 'success' ya da kalite skoru >= 70)"""
+        return self._list_active_trials(self._SUCCESS_SQL)
 
     def find_nearest_trial(self, params: Dict) -> Optional[Dict]:
         return None # Basitleştirildi

@@ -40,6 +40,27 @@ except ImportError:
     ICONS = {}
 
 
+# Imported / measured values shown read-only in "Kayıtlı ölçümler" (column -> label, format)
+MEASUREMENT_FIELDS = [
+    ('viscosity', 'Viskozite', '{:g} KU'),
+    ('viscosity_sec', 'Viskozite (akış kabı)', '{:g} sn'),
+    ('density', 'Özgül ağırlık', '{:g} g/ml'),
+    ('ph', 'pH', '{:g}'),
+    ('solid_content_measured', 'Katı madde', '%{:g}'),
+    ('grind_um', 'Ezilme', '{:g} µm'),
+    ('gloss_60', 'Parlaklık 60°', '{:g} GU'),
+    ('adhesion', 'Yapışma (0–5)', '{:.1f}'),
+    ('dft_um', 'Kuru film', '{:g} µm'),
+    ('corrosion_test_h', 'Korozyon testi', '{:g} saat'),
+    ('scribe_creep_mm', 'Çizik pası', '{:.1f} mm'),
+    ('undercut_mm', 'Boya altı pas', '{:.1f} mm'),
+    ('surface_rust_ri', 'Yüzey pası', 'Ri{:.1f}'),
+    ('humidity_test_h', 'Nem testi', '{:g} saat'),
+    ('humidity_adhesion_b', 'Nem sonrası yapışma', '{:.1f}B'),
+    ('humidity_rust_ri', 'Nem sonrası pas', 'Ri{:.1f}'),
+]
+
+
 # Status threshold configuration (domain knowledge)
 TEST_THRESHOLDS = {
     # Mekanik Testler
@@ -824,6 +845,16 @@ class TestResultsPanelV2(ttk.Frame, I18nMixin):
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
+        # Recorded measurements / result of the selected variation (read-only)
+        self.meas_frame = tk.LabelFrame(
+            self.scroll_frame, text="📋 Kayıtlı ölçümler ve sonuç",
+            font=FONTS.get('heading', ('Segoe UI', 11, 'bold')),
+            bg=COLORS['bg_panel'], fg=COLORS['text_primary'], padx=10, pady=6)
+        self.meas_frame.pack(fill=tk.X, pady=(2, 8))
+        self.meas_body = tk.Frame(self.meas_frame, bg=COLORS['bg_panel'])
+        self.meas_body.pack(fill=tk.X)
+        self._render_measurements(None)
+
         # Build collapsible test groups
         for cat_key, cat_info in TEST_CATEGORIES.items():
             group = CollapsibleTestGroup(
@@ -888,12 +919,66 @@ class TestResultsPanelV2(ttk.Frame, I18nMixin):
         formulation = self.formulation_combo.get()
         if not formulation:
             return
-        
+
         if self.on_load_trial:
             trial_data = self.on_load_trial(formulation)
             if trial_data:
-                self._load_trial_data(trial_data)
+                self.show_trial(trial_data)
     
+    def show_trial(self, trial: Dict):
+        """Show a variation selected elsewhere (project tree) - loaded by id, not by code"""
+        self.current_trial_id = trial.get('id')
+        self.current_formulation_code = trial.get('trial_code')
+        self.formulation_combo.set(trial.get('trial_code') or '')
+        date = (trial.get('trial_date') or '')[:10]
+        self.date_entry.delete(0, tk.END)
+        self.date_entry.insert(0, date or datetime.now().strftime('%Y-%m-%d'))
+        for group in self.test_groups.values():
+            group.clear()
+        self._load_trial_data(trial)
+        self._render_measurements(trial)
+
+    def _render_measurements(self, trial: Optional[Dict]):
+        for w in self.meas_body.winfo_children():
+            w.destroy()
+
+        def label(text, row, col, fg=None, bold=False, span=1):
+            tk.Label(self.meas_body, text=text, bg=COLORS['bg_panel'],
+                     fg=fg or COLORS['text_primary'], anchor='w', justify='left', wraplength=560,
+                     font=('Segoe UI', 9, 'bold' if bold else 'normal')
+                     ).grid(row=row, column=col, columnspan=span, sticky='w', padx=(0, 14), pady=1)
+
+        if not trial:
+            label("Soldaki ağaçtan bir varyasyon seçin.", 0, 0, COLORS['text_secondary'], span=4)
+            return
+        row = 0
+        verdict = {'olumlu': ('✅ Olumlu', COLORS['accent_success']),
+                   'olumsuz': ('❌ Olumsuz', COLORS['accent_danger']),
+                   'karisik': ('⚖️ Karışık', COLORS['accent_warning'])}.get(trial.get('label') or '')
+        if verdict:
+            reason = trial.get('label_reason') or ''
+            label(f"Sonuç: {verdict[0]}" + ("  — notlardan çıkarıldı" if reason else ''), row, 0, verdict[1], True, 4)
+            row += 1
+        values = [(name, fmt, trial.get(col)) for col, name, fmt in MEASUREMENT_FIELDS
+                  if isinstance(trial.get(col), (int, float))]
+        if values:
+            # iki sütun; etiket ve değer tek satırda (dar panelde kesilmesin)
+            for i, (name, fmt, val) in enumerate(values):
+                cell = tk.Frame(self.meas_body, bg=COLORS['bg_panel'])
+                cell.grid(row=row + i // 2, column=(i % 2) * 2, columnspan=2, sticky='w', padx=(0, 16), pady=1)
+                tk.Label(cell, text=f"{name}: ", bg=COLORS['bg_panel'], fg=COLORS['text_secondary'],
+                         font=('Segoe UI', 9)).pack(side=tk.LEFT)
+                tk.Label(cell, text=fmt.format(val), bg=COLORS['bg_panel'], fg=COLORS['text_primary'],
+                         font=('Segoe UI', 9, 'bold')).pack(side=tk.LEFT)
+            row += (len(values) + 1) // 2
+        else:
+            label("Bu varyasyon için kayıtlı ölçüm yok (sadece reçete).", row, 0, COLORS['text_secondary'], span=4)
+            row += 1
+        src = trial.get('source_file')
+        if src:
+            parts = [src, trial.get('sheet_name') or '', trial.get('report_source') and f"rapor: {trial['report_source']}"]
+            label("Kaynak: " + " · ".join(p for p in parts if p), row, 0, COLORS['text_secondary'], span=4)
+
     def _load_trial_data(self, data: Dict):
         """Load trial data into form"""
         for cat_key, group in self.test_groups.items():
@@ -1056,8 +1141,11 @@ class TestResultsPanelV2(ttk.Frame, I18nMixin):
     
     def get_test_data(self) -> Dict:
         """Get all test data as dictionary"""
+        code = self.formulation_combo.get()
         data = {
-            'formulation': self.formulation_combo.get(),
+            'formulation': code,
+            # the exact record shown on screen (codes are not unique across projects)
+            'trial_id': self.current_trial_id if code and code == self.current_formulation_code else None,
             'date': self.date_entry.get(),
             'notes': self.notes_text.get(1.0, tk.END).strip(),
             'include_in_ml': self.ml_panel.include_in_ml_var.get(),

@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import logging
+import re
 from typing import Callable, Optional, TYPE_CHECKING
 
 from src.core.i18n import t, I18nMixin
@@ -26,7 +27,9 @@ class SidebarNavigator(ttk.Frame, I18nMixin):
     def __init__(self, parent, db_manager, on_selection_change: Callable, 
                  on_project_change: Callable = None,
                  context: 'ProjectContext' = None):
-        super().__init__(parent, width=250)
+        # DPI ölçeğine göre genişlik (150% ekranda yazılar büyür, piksel genişliği büyümez)
+        scale = max(1.0, parent.winfo_fpixels("1i") / 96.0)
+        super().__init__(parent, width=int(320 * scale))
         self.pack_propagate(False) # Fixed width
         
         self.db_manager = db_manager
@@ -61,7 +64,31 @@ class SidebarNavigator(ttk.Frame, I18nMixin):
             command=self._open_new_project_dialog
         )
         self.new_project_btn.pack(fill=tk.X)
-        
+
+        # Search: project / concept / variation code / raw material in recipe
+        search_frame = ttk.Frame(self, padding=(5, 0, 5, 0))
+        search_frame.pack(fill=tk.X)
+        ttk.Label(search_frame, text="🔍").pack(side=tk.LEFT)
+        self.search_var = tk.StringVar()
+        self._search_after = None
+        self.search_var.trace_add('write', self._on_search_change)
+        self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
+        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(3, 3))
+        self.search_entry.bind('<Escape>', lambda e: self.search_var.set(''))
+        ttk.Button(search_frame, text="✕", width=2,
+                   command=lambda: self.search_var.set('')).pack(side=tk.RIGHT)
+        self.search_info = ttk.Label(self, padding=(8, 0, 5, 0), font=("Segoe UI", 8))
+        self.search_info.pack(fill=tk.X)
+
+        # View: flat (project -> Arge No) by default; grouped by concept on demand
+        view_frame = ttk.Frame(self, padding=(5, 0, 5, 0))
+        view_frame.pack(fill=tk.X)
+        self.group_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(view_frame, text="Konseptlere göre grupla", variable=self.group_var,
+                        command=lambda: self._populate(set())).pack(side=tk.LEFT)
+        ttk.Label(self, text="✅ olumlu   ❌ olumsuz   📈 ölçüm var   ○ sadece reçete",
+                  padding=(8, 2, 5, 0), font=("Segoe UI", 8)).pack(fill=tk.X)
+
         # Treeview
         self.tree = ttk.Treeview(self, show="tree", selectmode="browse")
         self.tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -80,7 +107,8 @@ class SidebarNavigator(ttk.Frame, I18nMixin):
         self.tree.tag_configure("concept", font=("Segoe UI", 9))
         self.tree.tag_configure("trial_success", foreground="#4CAF50") # Green
         self.tree.tag_configure("trial_fail", foreground="#F44336")    # Red
-        self.tree.tag_configure("trial_draft", foreground="#FFC107")   # Orange
+        self.tree.tag_configure("trial_tested", foreground="#FFC107")  # Orange: has measurements
+        self.tree.tag_configure("trial_draft", foreground="#9E9E9E")   # Grey: recipe only
     
     def _open_new_project_dialog(self):
         """Open dialog to create a new project"""
@@ -121,62 +149,176 @@ class SidebarNavigator(ttk.Frame, I18nMixin):
                 opened.add(node)
             stack.extend(self.tree.get_children(node))
         
-        # Clear
-        self.tree.delete(*self.tree.get_children())
-        
         # Fetch Data
         try:
-            projects = self.db_manager.get_project_hierarchy()
+            self._hierarchy = self.db_manager.get_project_hierarchy()
         except Exception as e:
             logging.error(f"Failed to fetch hierarchy: {e}")
             return
-            
-        # Repopulate
-        for proj in projects:
-            proj_id = f"p_{proj['id']}"
-            self.tree.insert(
-                "", "end", proj_id, 
-                text=f"📁 {proj['name']}", 
-                tags=("project",),
-                values=(TYPE_PROJECT, proj['id'])
-            )
-            
-            # Concepts
-            for concept in proj.get('concepts', []):
-                conc_id = f"c_{concept['id']}"
-                self.tree.insert(
-                    proj_id, "end", conc_id,
-                    text=f"🧪 {concept['concept_name']}",
-                    tags=("concept",),
-                    values=(TYPE_CONCEPT, concept['id'])
-                )
-                
-                # Trials
-                for trial in concept.get('trials', []):
-                    trial_id = f"t_{trial['id']}"
-                    
-                    # Determine icon/color based on result
-                    status = trial.get('result', '').lower()
-                    icon = "📉" if "fail" in status else "📈"
-                    tag = "trial_draft"
-                    if "success" in status or "pass" in status:
-                        tag = "trial_success"
-                        icon = "✅"
-                    elif "fail" in status:
-                        tag = "trial_fail"
-                        icon = "❌"
-                        
-                    self.tree.insert(
-                        conc_id, "end", trial_id,
-                        text=f"{icon} {trial.get('trial_code', 'Trial')}",
-                        tags=(tag,),
-                        values=(TYPE_TRIAL, trial['id'])
-                    )
+        self._trial_materials = self._load_trial_materials()
+        self._populate(opened)
 
-        for node in opened:
-            if self.tree.exists(node):
-                self.tree.item(node, open=True)
-        
+    # ---------- search ----------
+    _TR = str.maketrans("İIıŞşĞğÜüÖöÇç", "iiissgguuoocc")
+
+    @classmethod
+    def _fold(cls, text) -> str:
+        return str(text or '').translate(cls._TR).casefold()
+
+    def _load_trial_materials(self) -> dict:
+        """trial_id -> folded text of all raw-material names/codes in its recipe"""
+        result = {}
+        try:
+            with self.db_manager.get_connection() as conn:
+                for trial_id, name, code in conn.execute(
+                        'SELECT trial_id, component_name, component_type FROM components '
+                        'WHERE trial_id IS NOT NULL'):
+                    result.setdefault(trial_id, []).append(self._fold(f"{name} {code or ''}"))
+        except Exception as e:
+            logging.warning(f"Search index for materials failed: {e}")
+        return {k: ' | '.join(v) for k, v in result.items()}
+
+    def _on_search_change(self, *args):
+        if self._search_after:
+            self.after_cancel(self._search_after)
+        self._search_after = self.after(250, lambda: self._populate(set()))
+
+    def _populate(self, opened: set):
+        """Render tree from cached hierarchy, filtered by the search box"""
+        self.tree.delete(*self.tree.get_children())
+        query = self._fold(self.search_var.get().strip()) if hasattr(self, 'search_var') else ''
+        terms = query.split()
+        hits = 0
+        material_hits = 0
+
+        def match(text):
+            folded = self._fold(text)
+            return all(term in folded for term in terms)
+
+        if not self.group_var.get():
+            hits, material_hits = self._populate_flat(terms, match)
+        else:
+            hits, material_hits = self._populate_grouped(terms, match)
+
+        if terms:
+            info = f"{hits} varyasyon bulundu"
+            if material_hits:
+                info += f" ({material_hits} hammadde eşleşmesi)"
+            self.search_info.config(text=info)
+        else:
+            self.search_info.config(text='')
+            for node in opened:
+                if self.tree.exists(node):
+                    self.tree.item(node, open=True)
+
+    def _populate_flat(self, terms, match):
+        """Project -> variations (Arge No), newest first; the concept (sheet) name becomes the label"""
+        hits = material_hits = 0
+        projects = []
+        for proj in getattr(self, '_hierarchy', []):
+            proj_match = bool(terms) and match(proj['name'])
+            rows = []
+            for concept in proj.get('concepts', []):
+                conc_match = proj_match or (bool(terms) and match(concept['concept_name']))
+                for trial in concept.get('trials', []):
+                    if terms and not conc_match:
+                        by_code = match(trial.get('trial_code', ''))
+                        by_mat = (not by_code) and match(self._trial_materials.get(trial['id'], ''))
+                        if not (by_code or by_mat):
+                            continue
+                        material_hits += by_mat
+                    rows.append((trial, concept['concept_name']))
+            if terms and not rows and not proj_match:
+                continue
+            rows.sort(key=lambda r: (r[0].get('trial_date') or '', r[0].get('trial_code') or ''), reverse=True)
+            latest = rows[0][0].get('trial_date') or '' if rows else ''
+            projects.append((latest, proj, rows))
+        # projects with the most recent work first, undated ones last
+        projects.sort(key=lambda p: (p[0], p[1]['name']), reverse=True)
+        for _, proj, rows in projects:
+            total = sum(len(c.get('trials', [])) for c in proj.get('concepts', []))
+            self._insert_project(proj, count=len(rows) if terms else total)
+            for trial, concept_name in rows:
+                self._insert_trial(f"p_{proj['id']}", trial, concept_name)
+                hits += 1
+            if terms:
+                self.tree.item(f"p_{proj['id']}", open=True)
+        return hits, material_hits
+
+    def _populate_grouped(self, terms, match):
+        hits = material_hits = 0
+        for proj in getattr(self, '_hierarchy', []):
+            proj_match = bool(terms) and match(proj['name'])
+            proj_iid = f"p_{proj['id']}"
+            proj_inserted = False
+            for concept in proj.get('concepts', []):
+                conc_match = proj_match or (bool(terms) and match(concept['concept_name']))
+                conc_iid = f"c_{concept['id']}"
+                conc_inserted = False
+                for trial in concept.get('trials', []):
+                    if terms and not conc_match:
+                        by_code = match(trial.get('trial_code', ''))
+                        by_mat = (not by_code) and match(self._trial_materials.get(trial['id'], ''))
+                        if not (by_code or by_mat):
+                            continue
+                        material_hits += by_mat
+                    if not proj_inserted:
+                        self._insert_project(proj)
+                        proj_inserted = True
+                    if not conc_inserted:
+                        self._insert_concept(proj_iid, concept)
+                        conc_inserted = True
+                    self._insert_trial(conc_iid, trial)
+                    hits += 1
+                if not conc_inserted and (not terms or conc_match):
+                    if not proj_inserted:
+                        self._insert_project(proj)
+                        proj_inserted = True
+                    self._insert_concept(proj_iid, concept)
+                if terms and conc_inserted:
+                    self.tree.item(conc_iid, open=not conc_match or len(concept.get('trials', [])) <= 20)
+            if not proj_inserted and (not terms or proj_match):
+                self._insert_project(proj)
+            if terms and self.tree.exists(proj_iid):
+                self.tree.item(proj_iid, open=True)
+        return hits, material_hits
+
+    def _insert_project(self, proj, count=None):
+        label = f"📁 {proj['name']}" + (f"  ({count})" if count else "")
+        self.tree.insert("", "end", f"p_{proj['id']}", text=label,
+                         tags=("project",), values=(TYPE_PROJECT, proj['id']))
+
+    def _insert_concept(self, proj_iid, concept):
+        self.tree.insert(proj_iid, "end", f"c_{concept['id']}", text=f"🧪 {concept['concept_name']}",
+                         tags=("concept",), values=(TYPE_CONCEPT, concept['id']))
+
+    # imported cards without an Arge No got placeholder codes like "Sayfa1-R2C2" / "Ç5-R2C13-2"
+    _PLACEHOLDER = re.compile(r"-R\d+C\d+(-\d+)?$")
+
+    def _trial_label(self, trial, concept_name=None) -> str:
+        code = trial.get('trial_code') or 'Trial'
+        date = (trial.get('trial_date') or '')[:10]
+        if self._PLACEHOLDER.search(code):
+            name = concept_name or code
+            return f"{name} · {date}" if date else name
+        if concept_name and self._fold(concept_name) not in self._fold(code):
+            return f"{code} · {concept_name}"
+        return code
+
+    def _insert_trial(self, parent_iid, trial, concept_name=None):
+        status = (trial.get('result') or '').lower()
+        if "success" in status or "pass" in status:
+            tag, icon = "trial_success", "✅"
+        elif "fail" in status:
+            tag, icon = "trial_fail", "❌"
+        elif "tested" in status:
+            tag, icon = "trial_tested", "📈"
+        else:
+            tag, icon = "trial_draft", "○"
+        self.tree.insert(parent_iid, "end", f"t_{trial['id']}",
+                         text=f"{icon} {self._trial_label(trial, concept_name)}",
+                         tags=(tag,), values=(TYPE_TRIAL, trial['id']))
+
     def _on_select(self, event):
         selection = self.tree.selection()
         if not selection:
